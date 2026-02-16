@@ -17,9 +17,17 @@ function InputPageContent() {
   const location = searchParams.get("location") || "";
 
   const [products, setProducts] = useState<Product[]>([]);
+  const [newProducts, setNewProducts] = useState<Product[]>([]);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newProductForm, setNewProductForm] = useState({
+    productName: "",
+    sku: "",
+    batch: "",
+    qty: 0,
+  });
 
   useEffect(() => {
     if (!location) {
@@ -63,16 +71,70 @@ function InputPageContent() {
     }));
   };
 
+  const handleAddNewProduct = () => {
+    if (!newProductForm.productName || !newProductForm.sku || !newProductForm.batch) {
+      toast.error("Semua field harus diisi");
+      return;
+    }
+
+    if (newProductForm.qty <= 0) {
+      toast.error("Quantity harus lebih dari 0");
+      return;
+    }
+
+    // Check if SKU already exists
+    const allProducts = [...products, ...newProducts];
+    if (allProducts.some((p) => p.sku === newProductForm.sku)) {
+      toast.error("SKU sudah ada");
+      return;
+    }
+
+    const newProduct: Product = {
+      productName: newProductForm.productName,
+      sku: newProductForm.sku,
+      batch: newProductForm.batch,
+    };
+
+    setNewProducts((prev) => [...prev, newProduct]);
+    setQuantities((prev) => ({
+      ...prev,
+      [newProduct.sku]: newProductForm.qty,
+    }));
+
+    // Reset form
+    setNewProductForm({
+      productName: "",
+      sku: "",
+      batch: "",
+      qty: 0,
+    });
+    setShowAddForm(false);
+    toast.success("Produk baru berhasil ditambahkan");
+  };
+
   const handleSave = async () => {
     // Prepare items with quantities > 0
-    const items = products
+    const existingItems = products
       .filter((product) => quantities[product.sku] > 0)
       .map((product) => ({
         productName: product.productName,
         sku: product.sku,
         batch: product.batch,
         qty: quantities[product.sku],
+        isNew: false,
       }));
+
+    const newItems = newProducts
+      .filter((product) => quantities[product.sku] > 0)
+      .map((product) => ({
+        productName: product.productName,
+        sku: product.sku,
+        batch: product.batch,
+        qty: quantities[product.sku],
+        isNew: true,
+      }));
+
+    const items = [...existingItems, ...newItems];
 
     if (items.length === 0) {
       toast.error("Tidak ada produk dengan quantity > 0");
@@ -114,6 +176,7 @@ function InputPageContent() {
     );
   }
 
+  const allProducts = [...products, ...newProducts];
   const totalItems = Object.values(quantities).reduce((sum, qty) => sum + qty, 0);
 
   return (
@@ -126,12 +189,96 @@ function InputPageContent() {
       <div className="p-4">
         <div className="bg-primary-pale border border-primary rounded-lg p-4 mb-4">
           <p className="text-text-primary">
-            <span className="font-semibold">Total Produk:</span> {products.length}
+            <span className="font-semibold">Total Produk:</span> {allProducts.length}
           </p>
           <p className="text-text-primary">
             <span className="font-semibold">Total Item:</span> {totalItems}
           </p>
         </div>
+
+        {/* Add New Product Button */}
+        <div className="mb-4">
+          <button
+            onClick={() => setShowAddForm(!showAddForm)}
+            className="w-full bg-primary text-white py-3 rounded-lg font-semibold hover:bg-primary-light transition"
+          >
+            {showAddForm ? "Tutup Form" : "+ Tambah Produk Baru"}
+          </button>
+        </div>
+
+        {/* Add New Product Form */}
+        {showAddForm && (
+          <div className="bg-white border border-border rounded-lg p-4 mb-4 shadow-md">
+            <h3 className="text-lg font-semibold mb-3 text-text-primary">
+              Tambah Produk Baru
+            </h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-text-primary mb-1">
+                  Nama Produk
+                </label>
+                <input
+                  type="text"
+                  value={newProductForm.productName}
+                  onChange={(e) =>
+                    setNewProductForm({ ...newProductForm, productName: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder="Masukkan nama produk"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-primary mb-1">
+                  SKU
+                </label>
+                <input
+                  type="text"
+                  value={newProductForm.sku}
+                  onChange={(e) =>
+                    setNewProductForm({ ...newProductForm, sku: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder="Masukkan SKU"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-primary mb-1">
+                  Batch
+                </label>
+                <input
+                  type="text"
+                  value={newProductForm.batch}
+                  onChange={(e) =>
+                    setNewProductForm({ ...newProductForm, batch: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder="Masukkan batch"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-primary mb-1">
+                  Quantity
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={newProductForm.qty}
+                  onChange={(e) =>
+                    setNewProductForm({ ...newProductForm, qty: parseInt(e.target.value) || 0 })
+                  }
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder="Masukkan quantity"
+                />
+              </div>
+              <button
+                onClick={handleAddNewProduct}
+                className="w-full bg-primary text-white py-2 rounded-lg font-semibold hover:bg-primary-light transition"
+              >
+                Tambahkan Produk
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="mb-4">
           {products.map((product) => (
@@ -142,6 +289,21 @@ function InputPageContent() {
               onChange={handleQuantityChange}
             />
           ))}
+          {newProducts.length > 0 && (
+            <>
+              <div className="my-4 border-t-2 border-primary pt-2">
+                <h3 className="text-lg font-semibold text-primary mb-2">Produk Baru</h3>
+              </div>
+              {newProducts.map((product) => (
+                <ProductCard
+                  key={product.sku}
+                  product={product}
+                  quantity={quantities[product.sku] || 0}
+                  onChange={handleQuantityChange}
+                />
+              ))}
+            </>
+          )}
         </div>
 
         <div className="fixed bottom-20 left-0 right-0 p-4 bg-white border-t border-border">

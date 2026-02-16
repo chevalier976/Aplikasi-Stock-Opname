@@ -89,7 +89,7 @@ function getProducts(locationCode) {
 }
 
 /**
- * Save stock opname data
+ * Save stock opname data and sync Master Data
  */
 function saveStockOpname(data) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("StockOpname");
@@ -111,7 +111,62 @@ function saveStockOpname(data) {
     ]);
   });
   
+  // Sync Master Data after saving stock opname
+  syncMasterData(data.location, data.items);
+  
   return { success: true, message: "Stock opname berhasil disimpan" };
+}
+
+/**
+ * Synchronize Master Data based on stock opname results
+ * - Add new products (isNew: true)
+ * - Remove products not in the items list (qty = 0 or deleted)
+ */
+function syncMasterData(locationCode, items) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Products");
+  const data = sheet.getDataRange().getValues();
+  
+  // Create a map of items to save (sku -> item)
+  const itemsMap = {};
+  items.forEach(item => {
+    itemsMap[item.sku] = item;
+  });
+  
+  // Track rows to delete (from bottom to top to avoid index shifting)
+  const rowsToDelete = [];
+  
+  // Check existing products in Master Data for this location
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (data[i][0] === locationCode) {
+      const sku = data[i][2];
+      
+      // If product is not in the items list, mark for deletion
+      if (!itemsMap[sku]) {
+        rowsToDelete.push(i + 1); // +1 because row index is 1-based
+      } else {
+        // Remove from map as it already exists in Master Data
+        delete itemsMap[sku];
+      }
+    }
+  }
+  
+  // Delete rows that are not in the items list
+  rowsToDelete.forEach(rowIndex => {
+    sheet.deleteRow(rowIndex);
+  });
+  
+  // Add new products to Master Data (remaining items in map are new)
+  Object.keys(itemsMap).forEach(sku => {
+    const item = itemsMap[sku];
+    if (item.isNew === true) {
+      sheet.appendRow([
+        locationCode,
+        item.productName,
+        item.sku,
+        item.batch
+      ]);
+    }
+  });
 }
 
 /**
