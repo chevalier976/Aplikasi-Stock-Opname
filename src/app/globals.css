@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary: #4a5d3e;
+  --primary-light: #5c7a4a;
+  --primary-pale: #f5f7f3;
+  --primary-bg: #e8ece6;
+  --error: #d32f2f;
+  --warning: #fff3cd;
+  --warning-text: #856404;
+  --text-primary: #333333;
+  --text-secondary: #888888;
+  --border: #cccccc;
+}
