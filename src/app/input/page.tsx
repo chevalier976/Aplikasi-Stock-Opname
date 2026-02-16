@@ -28,7 +28,7 @@ function InputPageContent() {
     }
 
     fetchProducts();
-  }, [location]);
+  }, [location, router]);
 
   const fetchProducts = async () => {
     setLoading(true);
