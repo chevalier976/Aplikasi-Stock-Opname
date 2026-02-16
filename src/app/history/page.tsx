@@ -77,12 +77,10 @@ export default function HistoryPage() {
   const formatDate = (isoString: string) => {
     try {
       const date = new Date(isoString);
-      return date.toLocaleString("id-ID", {
+      return date.toLocaleDateString("id-ID", {
         day: "2-digit",
         month: "short",
         year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
       });
     } catch {
       return isoString;

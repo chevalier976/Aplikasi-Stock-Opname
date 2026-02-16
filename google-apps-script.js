@@ -9,31 +9,34 @@ function doPost(e) {
     const data = JSON.parse(e.postData.contents);
     const action = data.action;
     
+    let result;
     switch (action) {
       case "login":
-        return ContentService.createTextOutput(JSON.stringify(login(data.email, data.password)))
-          .setMimeType(ContentService.MimeType.JSON);
+        result = login(data.email, data.password);
+        break;
       
       case "getProducts":
-        return ContentService.createTextOutput(JSON.stringify(getProducts(data.locationCode)))
-          .setMimeType(ContentService.MimeType.JSON);
+        result = getProducts(data.locationCode);
+        break;
       
       case "saveStockOpname":
-        return ContentService.createTextOutput(JSON.stringify(saveStockOpname(data)))
-          .setMimeType(ContentService.MimeType.JSON);
+        result = saveStockOpname(data);
+        break;
       
       case "getHistory":
-        return ContentService.createTextOutput(JSON.stringify(getHistory(data.operator, data.filter)))
-          .setMimeType(ContentService.MimeType.JSON);
+        result = getHistory(data.operator, data.filter);
+        break;
       
       case "updateEntry":
-        return ContentService.createTextOutput(JSON.stringify(updateEntry(data)))
-          .setMimeType(ContentService.MimeType.JSON);
+        result = updateEntry(data);
+        break;
       
       default:
-        return ContentService.createTextOutput(JSON.stringify({ success: false, message: "Unknown action" }))
-          .setMimeType(ContentService.MimeType.JSON);
+        result = { success: false, message: "Unknown action" };
     }
+    
+    return ContentService.createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
   } catch (error) {
     return ContentService.createTextOutput(JSON.stringify({ success: false, message: error.toString() }))
       .setMimeType(ContentService.MimeType.JSON);
