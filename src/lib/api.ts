@@ -4,6 +4,8 @@ const API_URL = process.env.NEXT_PUBLIC_APPS_SCRIPT_URL || "";
 
 export const apiCall = async (action: string, data: any = {}): Promise<any> => {
   try {
+    // Using "text/plain" instead of "application/json" to avoid CORS preflight
+    // Google Apps Script doesn't support OPTIONS preflight requests
     const response = await fetch(API_URL, {
       method: "POST",
       headers: {
