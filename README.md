@@ -14,7 +14,7 @@ Aplikasi Stock Opname lengkap menggunakan Next.js 14 (App Router), TypeScript, T
 
 ## 🛠️ Tech Stack
 
-- **Frontend**: Next.js 14 (App Router), TypeScript, Tailwind CSS
+- **Frontend**: Next.js 16 (App Router), TypeScript, Tailwind CSS
 - **UI Library**: react-hot-toast untuk notifikasi
 - **Barcode**: react-qr-barcode-scanner
 - **Backend**: Google Apps Script + Google Sheets
