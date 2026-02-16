@@ -263,9 +263,10 @@ function InputPageContent() {
                   type="number"
                   min="0"
                   value={newProductForm.qty}
-                  onChange={(e) =>
-                    setNewProductForm({ ...newProductForm, qty: parseInt(e.target.value) || 0 })
-                  }
+                  onChange={(e) => {
+                    const value = e.target.value === "" ? 0 : parseInt(e.target.value);
+                    setNewProductForm({ ...newProductForm, qty: isNaN(value) ? 0 : value });
+                  }}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                   placeholder="Masukkan quantity"
                 />

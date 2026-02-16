@@ -155,9 +155,12 @@ function syncMasterData(locationCode, items) {
     sheet.deleteRow(rowIndex);
   });
   
-  // Add new products to Master Data (remaining items in map are new)
+  // Add new products to Master Data
+  // At this point, itemsMap only contains products not in Master Data
+  // But we still check isNew flag for safety to ensure frontend explicitly marked them
   Object.keys(itemsMap).forEach(sku => {
     const item = itemsMap[sku];
+    // Only add if explicitly marked as new
     if (item.isNew === true) {
       sheet.appendRow([
         locationCode,
