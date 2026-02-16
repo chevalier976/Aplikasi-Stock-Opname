@@ -34,7 +34,7 @@ This sheet stores user credentials for login.
 - D3: `user`
 
 ### Sheet 2: Products
-This sheet stores product data by location.
+This sheet stores product data by location. **This sheet is automatically synchronized** after each stock opname.
 
 **Column Headers (Row 1):**
 - A1: `location`
@@ -48,6 +48,12 @@ A01-B01-C01 | Produk A | SKU001 | BATCH001
 A01-B01-C01 | Produk B | SKU002 | BATCH002
 A02-B01-C01 | Produk C | SKU003 | BATCH003
 ```
+
+**Auto-Sync Behavior:**
+- When operators save stock opname results, this sheet is automatically updated
+- Products with qty > 0 remain in the sheet
+- Products with qty = 0 or not filled are removed from the sheet
+- New products discovered during stock opname are added to the sheet
 
 ### Sheet 3: StockOpname
 This sheet stores all stock opname entries.
@@ -169,11 +175,23 @@ POST {APPS_SCRIPT_URL}
       "productName": "Produk A",
       "sku": "SKU001",
       "batch": "BATCH001",
-      "qty": 10
+      "qty": 10,
+      "isNew": false
+    },
+    {
+      "productName": "Produk D (Baru)",
+      "sku": "SKU004",
+      "batch": "BATCH004",
+      "qty": 5,
+      "isNew": true
     }
   ]
 }
 ```
+
+**Note:** This endpoint also automatically synchronizes the Products (Master Data) sheet:
+- Products with `isNew: true` are added to Master Data
+- Products not in the items list are removed from Master Data for that location
 
 ### 4. Get History
 ```json

@@ -9,6 +9,8 @@ Aplikasi Stock Opname lengkap menggunakan Next.js 14 (App Router), TypeScript, T
 - 📷 **Barcode Scanner** - Scan barcode lokasi menggunakan kamera
 - 📝 **Input Manual** - Input kode lokasi secara manual
 - 📦 **Input Quantity** - Input quantity untuk setiap produk di lokasi
+- ➕ **Tambah Produk Baru** - Tambahkan produk baru yang ditemukan saat stock opname
+- 🔄 **Sinkronisasi Otomatis** - Master Data ter-update otomatis setelah stock opname
 - 📋 **Riwayat** - Lihat dan edit riwayat stock opname
 - 🎨 **UI Modern** - Design dengan Tailwind CSS dan color scheme yang konsisten
 
@@ -307,7 +309,12 @@ Aplikasi menggunakan custom color scheme yang didefinisikan di `src/app/globals.
 - List semua produk di lokasi
 - Input quantity per produk
 - Increment/decrement dengan button
+- **Tambah produk baru** yang ditemukan di lokasi tapi belum ada di Master Data
 - Simpan stock opname ke backend
+- **Sinkronisasi otomatis Master Data:**
+  - Produk dengan qty > 0 tetap ada di Master Data
+  - Produk dengan qty = 0 atau tidak diisi dihapus dari Master Data
+  - Produk baru ditambahkan ke Master Data
 
 ### 4. Riwayat
 - List semua stock opname yang sudah dilakukan

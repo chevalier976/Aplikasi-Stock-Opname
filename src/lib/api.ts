@@ -7,7 +7,7 @@ export const apiCall = async (action: string, data: any = {}): Promise<any> => {
     const response = await fetch(API_URL, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type": "text/plain",
       },
       body: JSON.stringify({ action, ...data }),
     });
@@ -47,6 +47,7 @@ export const saveStockOpnameApi = async (
     sku: string;
     batch: string;
     qty: number;
+    isNew?: boolean;
   }>
 ): Promise<{ success: boolean; message?: string }> => {
   return apiCall("saveStockOpname", {
