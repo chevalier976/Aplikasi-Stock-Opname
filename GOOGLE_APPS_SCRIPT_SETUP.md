@@ -219,13 +219,16 @@ POST {APPS_SCRIPT_URL}
 If you need to make changes to the backend:
 
 1. Edit the code in Apps Script editor
-2. Click **Save**
-3. Click **Deploy** > **Manage deployments**
-4. Click the pencil icon ✏️ next to your active deployment
-5. Update the **Version** to "New version"
-6. Click **Deploy**
+2. Copy the updated code from `google-apps-script.js` file
+3. Click **Save**
+4. Click **Deploy** > **Manage deployments**
+5. Click the pencil icon ✏️ next to your active deployment
+6. Update the **Version** to "New version"
+7. Click **Deploy**
 
 The Web app URL will remain the same, so you don't need to update your frontend configuration.
+
+**⚠️ IMPORTANT**: After updating the code in this repository, you MUST redeploy the Apps Script for changes to take effect!
 
 ## Monitoring and Logs
 
