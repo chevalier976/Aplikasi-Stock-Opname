@@ -38,6 +38,33 @@ function getOperatorName(email) {
 }
 
 /**
+ * Normalize text for safer comparison
+ */
+function normalizeText(value) {
+  return String(value || "").trim();
+}
+
+/**
+ * Normalize location code for consistent matching
+ */
+function normalizeLocation(value) {
+  return normalizeText(value).toUpperCase();
+}
+
+/**
+ * Execute a write operation with script lock to avoid race conditions
+ */
+function withScriptLock(callback) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    return callback();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
  * Main entry point for POST requests
  */
 function doPost(e) {
@@ -126,9 +153,10 @@ function login(email, password) {
 function lookupBarcode(barcode) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Master Data");
   const data = sheet.getDataRange().getValues();
+  const targetBarcode = normalizeText(barcode);
   
   for (let i = 1; i < data.length; i++) {
-    if (String(data[i][4]).trim() === String(barcode).trim()) {
+    if (normalizeText(data[i][4]) === targetBarcode) {
       return {
         success: true,
         product: {
@@ -222,9 +250,10 @@ function getProducts(locationCode) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Master Data");
   const data = sheet.getDataRange().getValues();
   const products = [];
+  const targetLocation = normalizeLocation(locationCode);
   
   for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === locationCode) {
+    if (normalizeLocation(data[i][0]) === targetLocation) {
       products.push({
         productName: data[i][1],
         sku: data[i][2],
@@ -245,42 +274,77 @@ function getProducts(locationCode) {
  * Delete a product from Master Data by location and SKU
  */
 function deleteProduct(locationCode, sku) {
+  return withScriptLock(() => deleteProductInternal(locationCode, sku));
+}
+
+/**
+ * Internal delete product (no lock). Use via deleteProduct or from already-locked flow.
+ */
+function deleteProductInternal(locationCode, sku) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Master Data");
   const data = sheet.getDataRange().getValues();
-  
-  for (let i = data.length - 1; i >= 1; i--) {
-    if (data[i][0] === locationCode && data[i][2] === sku) {
-      sheet.deleteRow(i + 1);
-      return { success: true, message: "Produk berhasil dihapus dari lokasi" };
+  const targetLocation = normalizeLocation(locationCode);
+  const targetSku = normalizeText(sku);
+
+  const header = data[0] || ["location", "productName", "sku", "batch", "barcode"];
+  const keptRows = [];
+  let deleted = false;
+
+  for (let i = 1; i < data.length; i++) {
+    const rowLocation = normalizeLocation(data[i][0]);
+    const rowSku = normalizeText(data[i][2]);
+    if (rowLocation === targetLocation && rowSku === targetSku) {
+      deleted = true;
+      continue;
     }
+    keptRows.push([data[i][0], data[i][1], data[i][2], data[i][3], data[i][4] || ""]);
   }
-  
-  return { success: false, message: "Produk tidak ditemukan di lokasi tersebut" };
+
+  if (!deleted) {
+    return { success: false, message: "Produk tidak ditemukan di lokasi tersebut" };
+  }
+
+  const totalRows = sheet.getLastRow();
+  if (totalRows > 1) {
+    sheet.getRange(2, 1, totalRows - 1, 5).clearContent();
+  }
+
+  if (keptRows.length > 0) {
+    sheet.getRange(2, 1, keptRows.length, 5).setValues(keptRows);
+  }
+
+  // Ensure header is always present
+  sheet.getRange(1, 1, 1, 5).setValues([header.slice(0, 5)]);
+  return { success: true, message: "Produk berhasil dihapus dari lokasi" };
 }
 
 /**
  * Save stock opname data and sync Master Data
  */
 function saveStockOpname(data) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Stock Opname Results");
-  
-  // Generate shorter session ID
-  const sessionId = generateShortId("SO-", 6);
-  
-  // Format timestamp: dd MMM yyyy HH:mm
-  const timestamp = formatTimestamp(data.timestamp);
-  
-  // Get operator first name
-  const operatorName = getOperatorName(data.operator);
-  
-  data.items.forEach(item => {
-    const rowId = generateShortId("R-", 6);
-    sheet.appendRow([
+  return withScriptLock(() => {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Stock Opname Results");
+
+    if (!data.items || !Array.isArray(data.items) || data.items.length === 0) {
+      return { success: false, message: "Tidak ada item untuk disimpan" };
+    }
+
+    // Generate shorter session ID
+    const sessionId = generateShortId("SO-", 6);
+
+    // Format timestamp: dd MMM yyyy HH:mm
+    const timestamp = formatTimestamp(data.timestamp);
+
+    // Get operator first name
+    const operatorName = getOperatorName(data.operator);
+
+    // Batch build rows for faster writes
+    const rows = data.items.map(item => [
       sessionId,
-      rowId,
+      generateShortId("R-", 6),
       timestamp,
       operatorName,
-      data.location,
+      normalizeLocation(data.location),
       item.productName,
       item.sku,
       item.batch,
@@ -288,12 +352,15 @@ function saveStockOpname(data) {
       "No",  // edited
       ""     // editTimestamp
     ]);
+
+    const startRow = sheet.getLastRow() + 1;
+    sheet.getRange(startRow, 1, rows.length, 11).setValues(rows);
+
+    // Sync Master Data after saving stock opname
+    syncMasterDataInternal(normalizeLocation(data.location), data.items);
+
+    return { success: true, message: "Stock opname berhasil disimpan" };
   });
-  
-  // Sync Master Data after saving stock opname
-  syncMasterData(data.location, data.items);
-  
-  return { success: true, message: "Stock opname berhasil disimpan" };
 }
 
 /**
@@ -302,51 +369,60 @@ function saveStockOpname(data) {
  * - Remove products not in the items list (qty = 0 or deleted)
  */
 function syncMasterData(locationCode, items) {
+  return withScriptLock(() => syncMasterDataInternal(locationCode, items));
+}
+
+/**
+ * Internal sync Master Data (no lock). Use via syncMasterData or from already-locked flow.
+ */
+function syncMasterDataInternal(locationCode, items) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Master Data");
   const data = sheet.getDataRange().getValues();
-  
-  // Create a map of items to save (sku -> item)
-  const itemsMap = {};
-  items.forEach(item => {
-    itemsMap[item.sku] = item;
-  });
-  
-  // Track rows to delete (from bottom to top to avoid index shifting)
-  const rowsToDelete = [];
-  
-  // Check existing products in Master Data for this location
-  for (let i = data.length - 1; i >= 1; i--) {
-    if (data[i][0] === locationCode) {
-      const sku = data[i][2];
-      
-      // If product is not in the items list, mark for deletion
-      if (!itemsMap[sku]) {
-        rowsToDelete.push(i + 1); // +1 because row index is 1-based
-      } else {
-        // Remove from map as it already exists in Master Data
-        delete itemsMap[sku];
-      }
+  const normalizedLocation = normalizeLocation(locationCode);
+
+  // Keep only rows from other locations
+  const keptRows = [];
+  for (let i = 1; i < data.length; i++) {
+    const rowLocation = normalizeLocation(data[i][0]);
+    if (rowLocation !== normalizedLocation) {
+      keptRows.push([data[i][0], data[i][1], data[i][2], data[i][3], data[i][4] || ""]);
     }
   }
-  
-  // Delete rows that are not in the items list
-  rowsToDelete.forEach(rowIndex => {
-    sheet.deleteRow(rowIndex);
+
+  // Build current location rows from latest opname items
+  const itemMapBySku = {};
+  (items || []).forEach(item => {
+    const sku = normalizeText(item.sku);
+    if (!sku) return;
+    itemMapBySku[sku] = item;
   });
-  
-  // Add new products to Master Data
-  Object.keys(itemsMap).forEach(sku => {
-    const item = itemsMap[sku];
-    if (item.isNew === true) {
-      sheet.appendRow([
-        locationCode,
-        item.productName,
-        item.sku,
-        item.batch,
-        item.barcode || ""  // barcode column E
-      ]);
-    }
+
+  const locationRows = Object.keys(itemMapBySku).map(sku => {
+    const item = itemMapBySku[sku];
+    return [
+      normalizedLocation,
+      item.productName || "",
+      sku,
+      item.batch || "",
+      item.barcode || ""
+    ];
   });
+
+  const allRows = keptRows.concat(locationRows);
+  const header = data[0] || ["location", "productName", "sku", "batch", "barcode"];
+
+  // Clear previous data rows, then write fresh rows in batch
+  const totalRows = sheet.getLastRow();
+  if (totalRows > 1) {
+    sheet.getRange(2, 1, totalRows - 1, 5).clearContent();
+  }
+
+  // Ensure header remains
+  sheet.getRange(1, 1, 1, 5).setValues([header.slice(0, 5)]);
+
+  if (allRows.length > 0) {
+    sheet.getRange(2, 1, allRows.length, 5).setValues(allRows);
+  }
 }
 
 /**
@@ -404,32 +480,33 @@ function getHistory(operator, filter) {
  * Update a specific entry (qty, productName, sku, batch)
  */
 function updateEntry(data) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Stock Opname Results");
-  const values = sheet.getDataRange().getValues();
-  
-  for (let i = 1; i < values.length; i++) {
-    if (values[i][1] === data.rowId) {
-      // Update productName if provided
-      if (data.productName !== undefined) {
-        sheet.getRange(i + 1, 6).setValue(data.productName);  // col F
+  return withScriptLock(() => {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Stock Opname Results");
+    const values = sheet.getDataRange().getValues();
+
+    for (let i = 1; i < values.length; i++) {
+      if (values[i][1] === data.rowId) {
+        const row = values[i].slice();
+
+        // Update productName if provided (col F index 5)
+        if (data.productName !== undefined) row[5] = data.productName;
+        // Update sku if provided (col G index 6)
+        if (data.sku !== undefined) row[6] = data.sku;
+        // Update batch if provided (col H index 7)
+        if (data.batch !== undefined) row[7] = data.batch;
+
+        // Update qty, edited, and edit timestamp
+        row[8] = data.newQty;
+        row[9] = "Yes";
+        row[10] = formatTimestamp(data.editTimestamp);
+
+        sheet.getRange(i + 1, 1, 1, row.length).setValues([row]);
+        return { success: true, message: "Entry berhasil diupdate" };
       }
-      // Update sku if provided
-      if (data.sku !== undefined) {
-        sheet.getRange(i + 1, 7).setValue(data.sku);          // col G
-      }
-      // Update batch if provided
-      if (data.batch !== undefined) {
-        sheet.getRange(i + 1, 8).setValue(data.batch);        // col H
-      }
-      // Update qty
-      sheet.getRange(i + 1, 9).setValue(data.newQty);         // col I
-      sheet.getRange(i + 1, 10).setValue("Yes");              // edited
-      sheet.getRange(i + 1, 11).setValue(formatTimestamp(data.editTimestamp)); // editTimestamp
-      return { success: true, message: "Entry berhasil diupdate" };
     }
-  }
-  
-  return { success: false, message: "Entry tidak ditemukan" };
+
+    return { success: false, message: "Entry tidak ditemukan" };
+  });
 }
 
 /**
@@ -437,26 +514,28 @@ function updateEntry(data) {
  * Also removes the corresponding product from Master Data
  */
 function deleteEntry(rowId) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Stock Opname Results");
-  const values = sheet.getDataRange().getValues();
-  
-  for (let i = 1; i < values.length; i++) {
-    if (values[i][1] === rowId) {
-      // Get location and SKU before deleting
-      const location = values[i][4];
-      const sku = values[i][6];
-      
-      // Delete from Stock Opname Results
-      sheet.deleteRow(i + 1);
-      
-      // Also delete from Master Data
-      if (location && sku) {
-        deleteProduct(location, sku);
+  return withScriptLock(() => {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Stock Opname Results");
+    const values = sheet.getDataRange().getValues();
+
+    for (let i = 1; i < values.length; i++) {
+      if (values[i][1] === rowId) {
+        // Get location and SKU before deleting
+        const location = values[i][4];
+        const sku = values[i][6];
+
+        // Delete from Stock Opname Results
+        sheet.deleteRow(i + 1);
+
+        // Also delete from Master Data (internal no-lock because already locked)
+        if (location && sku) {
+          deleteProductInternal(location, sku);
+        }
+
+        return { success: true, message: "Entry dan Master Data berhasil dihapus" };
       }
-      
-      return { success: true, message: "Entry dan Master Data berhasil dihapus" };
     }
-  }
-  
-  return { success: false, message: "Entry tidak ditemukan" };
+
+    return { success: false, message: "Entry tidak ditemukan" };
+  });
 }
