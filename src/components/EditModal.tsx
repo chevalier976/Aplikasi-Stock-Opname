@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { HistoryEntry, Product } from "@/lib/types";
-import { lookupBarcodeApi, searchProductsApi, warmupCacheApi } from "@/lib/api";
+import { lookupBarcodeApi, searchProductsApi } from "@/lib/api";
 import BarcodeScanner from "./BarcodeScanner";
 
 export interface EditData {
@@ -43,16 +43,12 @@ export default function EditModal({
     setBatch(entry.batch);
     setBarcode("");
     setShowBarcodeScanner(false);
-    warmupCacheApi().catch(() => {});
   }, [entry]);
 
   if (!isOpen) return null;
 
   const handleProductSearch = (value: string) => {
     setProductName(value);
-    if (value.trim().length >= 1) {
-      warmupCacheApi({ productQuery: value.trim() }).catch(() => {});
-    }
     if (searchTimer) clearTimeout(searchTimer);
     if (value.trim().length < 2) {
       setSearchResults([]);

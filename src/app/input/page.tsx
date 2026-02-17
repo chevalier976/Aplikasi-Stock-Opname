@@ -9,6 +9,7 @@ import LoadingSpinner from "@/components/LoadingSpinner";
 import BarcodeScanner from "@/components/BarcodeScanner";
 import { getProductsApi, saveStockOpnameApi, deleteProductApi, lookupBarcodeApi, searchProductsApi, warmupCacheApi } from "@/lib/api";
 import { Product } from "@/lib/types";
+import { getCache, setCache, clearCache } from "@/lib/cache";
 import toast from "react-hot-toast";
 import BrandBLP from "@/components/BrandBLP";
 
@@ -53,26 +54,42 @@ function InputPageContent() {
   }, [location, router]);
 
   const fetchProducts = async () => {
-    setLoading(true);
+    const ck = `products:${location}`;
+
+    // AppSheet-style: show cached products INSTANTLY
+    const cached = getCache<Product[]>(ck);
+    if (cached) {
+      setProducts(cached.data);
+      const init: Record<string, number> = {};
+      cached.data.forEach((p) => (init[p.sku] = 0));
+      setQuantities(init);
+      setLoading(false); // UI langsung tampil!
+    }
+
+    // Background refresh
     try {
       const result = await getProductsApi(location);
-      
       if (result.success && result.products) {
         setProducts(result.products);
-        // Initialize quantities to 0
-        const initialQuantities: Record<string, number> = {};
-        result.products.forEach((product) => {
-          initialQuantities[product.sku] = 0;
+        setCache(ck, result.products);
+        // Only set qty for NEW products (don't overwrite user input)
+        setQuantities((prev) => {
+          const next = { ...prev };
+          result.products!.forEach((p) => {
+            if (next[p.sku] === undefined) next[p.sku] = 0;
+          });
+          return next;
         });
-        setQuantities(initialQuantities);
-      } else {
+      } else if (!cached) {
         toast.error(result.message || "Gagal mengambil data produk");
         router.push("/scan");
       }
     } catch (error) {
       console.error("Fetch products error:", error);
-      toast.error("Terjadi kesalahan saat mengambil data produk");
-      router.push("/scan");
+      if (!cached) {
+        toast.error("Terjadi kesalahan saat mengambil data produk");
+        router.push("/scan");
+      }
     } finally {
       setLoading(false);
     }
@@ -91,24 +108,42 @@ function InputPageContent() {
     );
     if (!confirmDelete) return;
 
+    // AppSheet-style: optimistic delete
+    const prevProducts = [...products];
+    const prevNewProducts = [...newProducts];
+    const prevQuantities = { ...quantities };
+
+    setProducts((prev) => prev.filter((p) => p.sku !== sku));
+    setNewProducts((prev) => prev.filter((p) => p.sku !== sku));
+    setQuantities((prev) => {
+      const copy = { ...prev };
+      delete copy[sku];
+      return copy;
+    });
+    toast.success("Produk berhasil dihapus");
+
+    // Update product cache
+    const ck = `products:${location}`;
+    setCache(ck, products.filter((p) => p.sku !== sku));
+    clearCache("history:"); // invalidate history cache
+
+    // Background sync
     try {
       const result = await deleteProductApi(location, sku);
-      if (result.success) {
-        // Remove from local state
-        setProducts((prev) => prev.filter((p) => p.sku !== sku));
-        setNewProducts((prev) => prev.filter((p) => p.sku !== sku));
-        setQuantities((prev) => {
-          const copy = { ...prev };
-          delete copy[sku];
-          return copy;
-        });
-        toast.success("Produk berhasil dihapus");
-      } else {
-        toast.error(result.message || "Gagal menghapus produk");
+      if (!result.success) {
+        setProducts(prevProducts);
+        setNewProducts(prevNewProducts);
+        setQuantities(prevQuantities);
+        setCache(ck, prevProducts);
+        toast.error(result.message || "Gagal menghapus, data dikembalikan");
       }
     } catch (error) {
       console.error("Delete error:", error);
-      toast.error("Terjadi kesalahan saat menghapus produk");
+      setProducts(prevProducts);
+      setNewProducts(prevNewProducts);
+      setQuantities(prevQuantities);
+      setCache(ck, prevProducts);
+      toast.error("Gagal menghapus, data dikembalikan");
     }
   };
 
@@ -283,6 +318,9 @@ function InputPageContent() {
       );
 
       if (result.success) {
+        // Invalidate caches after save
+        clearCache("history:");
+        clearCache("products:");
         toast.success("Stock opname berhasil disimpan!");
         router.push("/scan");
       } else {

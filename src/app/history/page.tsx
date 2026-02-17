@@ -7,6 +7,7 @@ import EditModal, { EditData } from "@/components/EditModal";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { getHistoryApi, updateEntryApi, deleteEntryApi } from "@/lib/api";
 import { HistoryEntry } from "@/lib/types";
+import { getCache, setCache, clearCache } from "@/lib/cache";
 import toast from "react-hot-toast";
 import BrandBLP from "@/components/BrandBLP";
 
@@ -25,8 +26,17 @@ export default function HistoryPage() {
 
   const fetchHistory = async () => {
     if (!user) return;
-    
-    setLoading(true);
+
+    const ck = `history:${user.email}:${filter}`;
+
+    // AppSheet-style: show cached data INSTANTLY
+    const cached = getCache<HistoryEntry[]>(ck);
+    if (cached) {
+      setHistory(cached.data);
+      setLoading(false); // UI langsung tampil!
+    }
+
+    // Background refresh (stale-while-revalidate)
     try {
       const result = await getHistoryApi(
         user.email,
@@ -35,12 +45,13 @@ export default function HistoryPage() {
 
       if (result.success && result.history) {
         setHistory(result.history);
-      } else {
+        setCache(ck, result.history);
+      } else if (!cached) {
         toast.error(result.message || "Gagal mengambil riwayat");
       }
     } catch (error) {
       console.error("Fetch history error:", error);
-      toast.error("Terjadi kesalahan saat mengambil riwayat");
+      if (!cached) toast.error("Terjadi kesalahan saat mengambil riwayat");
     } finally {
       setLoading(false);
     }
@@ -57,25 +68,61 @@ export default function HistoryPage() {
     );
     if (!confirmDelete) return;
 
+    // AppSheet-style: optimistic delete — hapus dari UI langsung
+    const prev = [...history];
+    const updated = history.filter((e) => e.rowId !== entry.rowId);
+    setHistory(updated);
+    toast.success("Entry berhasil dihapus");
+
+    const ck = `history:${user?.email}:${filter}`;
+    setCache(ck, updated);
+    clearCache("products:"); // invalidate product cache
+
+    // Background sync ke server
     try {
       const result = await deleteEntryApi(entry.rowId);
-      if (result.success) {
-        toast.success("Entry berhasil dihapus");
-        fetchHistory();
-      } else {
-        toast.error(result.message || "Gagal menghapus entry");
+      if (!result.success) {
+        setHistory(prev);
+        setCache(ck, prev);
+        toast.error(result.message || "Gagal menghapus, data dikembalikan");
       }
     } catch (error) {
       console.error("Delete error:", error);
-      toast.error("Terjadi kesalahan saat menghapus");
+      setHistory(prev);
+      setCache(ck, prev);
+      toast.error("Gagal menghapus, data dikembalikan");
     }
   };
 
   const handleSaveEdit = async (data: EditData) => {
     if (!selectedEntry) return;
 
+    const editTimestamp = new Date().toISOString();
+    const prev = [...history];
+
+    // AppSheet-style: optimistic edit — update UI langsung
+    const updated = history.map((e) =>
+      e.rowId === selectedEntry.rowId
+        ? {
+            ...e,
+            productName: data.productName ?? e.productName,
+            sku: data.sku ?? e.sku,
+            batch: data.batch ?? e.batch,
+            qty: data.newQty,
+            edited: "Yes",
+            editTimestamp,
+          }
+        : e
+    );
+    setHistory(updated);
+    setIsModalOpen(false);
+    toast.success("Berhasil mengupdate entry");
+
+    const ck = `history:${user?.email}:${filter}`;
+    setCache(ck, updated);
+
+    // Background sync ke server
     try {
-      const editTimestamp = new Date().toISOString();
       const result = await updateEntryApi(
         selectedEntry.rowId,
         selectedEntry.sessionId,
@@ -88,16 +135,16 @@ export default function HistoryPage() {
         }
       );
 
-      if (result.success) {
-        toast.success("Berhasil mengupdate entry");
-        setIsModalOpen(false);
-        fetchHistory();
-      } else {
-        toast.error(result.message || "Gagal mengupdate");
+      if (!result.success) {
+        setHistory(prev);
+        setCache(ck, prev);
+        toast.error(result.message || "Gagal mengupdate, data dikembalikan");
       }
     } catch (error) {
       console.error("Update error:", error);
-      toast.error("Terjadi kesalahan saat mengupdate");
+      setHistory(prev);
+      setCache(ck, prev);
+      toast.error("Gagal mengupdate, data dikembalikan");
     }
   };
 
