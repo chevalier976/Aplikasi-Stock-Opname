@@ -136,7 +136,7 @@ function InputPageContent() {
       } catch (error) {
         console.error("Search error:", error);
       }
-    }, 400);
+    }, 180);
     
     setSearchTimer(timer);
   };

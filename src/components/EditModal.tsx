@@ -65,7 +65,7 @@ export default function EditModal({
       } catch (error) {
         console.error("Search error:", error);
       }
-    }, 400);
+    }, 180);
     setSearchTimer(timer);
   };
 

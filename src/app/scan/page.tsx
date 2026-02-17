@@ -105,7 +105,7 @@ export default function ScanPage() {
       } finally {
         setSearchLoading(false);
       }
-    }, 400);
+    }, 180);
   };
 
   const handleSelectLocation = (loc: LocationResult) => {

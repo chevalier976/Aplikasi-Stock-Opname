@@ -64,6 +64,55 @@ function withScriptLock(callback) {
   }
 }
 
+const SEARCH_CACHE_TTL_SECONDS = 20;
+
+/**
+ * Get current cache version for search endpoints
+ */
+function getSearchCacheVersion() {
+  const props = PropertiesService.getScriptProperties();
+  return props.getProperty("SEARCH_CACHE_VERSION") || "1";
+}
+
+/**
+ * Invalidate search cache by bumping version
+ */
+function bumpSearchCacheVersion() {
+  const props = PropertiesService.getScriptProperties();
+  props.setProperty("SEARCH_CACHE_VERSION", String(Date.now()));
+}
+
+/**
+ * Build cache key for search endpoints
+ */
+function buildSearchCacheKey(prefix, query) {
+  const version = getSearchCacheVersion();
+  const encoded = Utilities.base64EncodeWebSafe(String(query || "")).slice(0, 120);
+  return prefix + ":" + version + ":" + encoded;
+}
+
+/**
+ * Get cached JSON object
+ */
+function getCachedObject(key) {
+  const cache = CacheService.getScriptCache();
+  const raw = cache.get(key);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Put JSON object into cache
+ */
+function putCachedObject(key, value, ttlSeconds) {
+  const cache = CacheService.getScriptCache();
+  cache.put(key, JSON.stringify(value), ttlSeconds || SEARCH_CACHE_TTL_SECONDS);
+}
+
 /**
  * Main entry point for POST requests
  */
@@ -181,9 +230,13 @@ function searchProducts(query) {
   const data = sheet.getDataRange().getValues();
   const results = [];
   const seen = {}; // deduplicate by SKU
-  const q = String(query).toLowerCase().trim();
+  const q = normalizeText(query).toLowerCase();
   
   if (!q) return { success: true, products: [] };
+
+  const cacheKey = buildSearchCacheKey("searchProducts", q);
+  const cached = getCachedObject(cacheKey);
+  if (cached) return cached;
   
   for (let i = 1; i < data.length; i++) {
     const productName = String(data[i][1]).toLowerCase();
@@ -200,8 +253,10 @@ function searchProducts(query) {
       if (results.length >= 10) break;
     }
   }
-  
-  return { success: true, products: results };
+
+  const response = { success: true, products: results };
+  putCachedObject(cacheKey, response, SEARCH_CACHE_TTL_SECONDS);
+  return response;
 }
 
 /**
@@ -212,9 +267,13 @@ function searchLocations(query) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Master Data");
   const data = sheet.getDataRange().getValues();
   const results = [];
-  const q = String(query).toLowerCase().trim();
+  const q = normalizeText(query).toLowerCase();
   
   if (!q) return { success: true, locations: [] };
+
+  const cacheKey = buildSearchCacheKey("searchLocations", q);
+  const cached = getCachedObject(cacheKey);
+  if (cached) return cached;
 
   // Build location -> productCount map in one pass (O(n))
   const locationCountMap = {};
@@ -238,8 +297,10 @@ function searchLocations(query) {
       if (results.length >= 15) break;
     }
   }
-  
-  return { success: true, locations: results };
+
+  const response = { success: true, locations: results };
+  putCachedObject(cacheKey, response, SEARCH_CACHE_TTL_SECONDS);
+  return response;
 }
 
 /**
@@ -315,6 +376,7 @@ function deleteProductInternal(locationCode, sku) {
 
   // Ensure header is always present
   sheet.getRange(1, 1, 1, 5).setValues([header.slice(0, 5)]);
+  bumpSearchCacheVersion();
   return { success: true, message: "Produk berhasil dihapus dari lokasi" };
 }
 
@@ -423,6 +485,9 @@ function syncMasterDataInternal(locationCode, items) {
   if (allRows.length > 0) {
     sheet.getRange(2, 1, allRows.length, 5).setValues(allRows);
   }
+
+  // Invalidate cached search results since master data changed
+  bumpSearchCacheVersion();
 }
 
 /**
