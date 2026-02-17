@@ -1,6 +1,6 @@
 import { User, Product, HistoryEntry } from "./types";
 
-const API_URL = process.env.NEXT_PUBLIC_APPS_SCRIPT_URL || "";
+const API_URL = (process.env.NEXT_PUBLIC_APPS_SCRIPT_URL || "").trim();
 
 export const apiCall = async (action: string, data: Record<string, unknown> = {}): Promise<any> => {
   if (!API_URL) {
