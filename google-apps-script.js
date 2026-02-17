@@ -184,27 +184,28 @@ function searchLocations(query) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Master Data");
   const data = sheet.getDataRange().getValues();
   const results = [];
-  const seen = {};
   const q = String(query).toLowerCase().trim();
   
   if (!q) return { success: true, locations: [] };
-  
+
+  // Build location -> productCount map in one pass (O(n))
+  const locationCountMap = {};
   for (let i = 1; i < data.length; i++) {
     const location = String(data[i][0]).trim();
+    if (!location) continue;
+    locationCountMap[location] = (locationCountMap[location] || 0) + 1;
+  }
+
+  const locations = Object.keys(locationCountMap).sort();
+  
+  for (let i = 0; i < locations.length; i++) {
+    const location = locations[i];
     const locationLower = location.toLowerCase();
     
-    if (locationLower.indexOf(q) !== -1 && !seen[location]) {
-      seen[location] = true;
-      
-      // Count products in this location
-      let productCount = 0;
-      for (let j = 1; j < data.length; j++) {
-        if (String(data[j][0]).trim() === location) productCount++;
-      }
-      
+    if (locationLower.indexOf(q) !== -1) {
       results.push({
         locationCode: location,
-        productCount: productCount
+        productCount: locationCountMap[location]
       });
       if (results.length >= 15) break;
     }

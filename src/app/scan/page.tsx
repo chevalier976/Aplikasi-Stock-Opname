@@ -18,23 +18,25 @@ export default function ScanPage() {
   const { user } = useAuth();
   const router = useRouter();
   const [locationCode, setLocationCode] = useState("");
-  const [scannerActive, setScannerActive] = useState(true);
+  const [showLocationScanner, setShowLocationScanner] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
 
-  // Location search state
-  const [searchMode, setSearchMode] = useState<"manual" | "search">("manual");
   const [locationResults, setLocationResults] = useState<LocationResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [searchLocationApiDisabled, setSearchLocationApiDisabled] = useState(false);
   const searchTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const normalizeLocationCode = (value: string) => value.toUpperCase().replace(/\s+/g, "").trim();
 
   const handleScan = async (code: string) => {
     if (isSearching) return;
     setIsSearching(true);
-    setLocationCode(code);
-    setScannerActive(false);
-    await searchLocation(code);
+    const normalized = normalizeLocationCode(code);
+    setLocationCode(normalized);
+    setShowLocationScanner(false);
+    await searchLocation(normalized);
     setIsSearching(false);
   };
 
@@ -43,7 +45,7 @@ export default function ScanPage() {
       toast.error("Masukkan kode lokasi");
       return;
     }
-    await searchLocation(locationCode.trim());
+    await searchLocation(normalizeLocationCode(locationCode));
   };
 
   const searchLocation = async (code: string) => {
@@ -55,23 +57,28 @@ export default function ScanPage() {
         router.push(`/input?location=${encodeURIComponent(code)}`);
       } else {
         toast.error(result.message || "Lokasi tidak ditemukan");
-        setScannerActive(true);
       }
     } catch (error) {
       console.error("Search error:", error);
-      toast.error("Terjadi kesalahan saat mencari lokasi");
-      setScannerActive(true);
+      toast.error("Koneksi ke server lokasi bermasalah. Cek URL Apps Script & deploy Web App (Anyone).");
     } finally {
       setLoading(false);
     }
   };
 
   const handleLocationSearch = (value: string) => {
-    setLocationCode(value);
+    const normalized = normalizeLocationCode(value);
+    setLocationCode(normalized);
 
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
 
-    if (value.trim().length < 1) {
+    if (normalized.length < 1) {
+      setLocationResults([]);
+      setShowResults(false);
+      return;
+    }
+
+    if (searchLocationApiDisabled) {
       setLocationResults([]);
       setShowResults(false);
       return;
@@ -80,13 +87,21 @@ export default function ScanPage() {
     searchTimerRef.current = setTimeout(async () => {
       setSearchLoading(true);
       try {
-        const result = await searchLocationsApi(value.trim());
+        const result = await searchLocationsApi(normalized);
         if (result.success && result.locations) {
           setLocationResults(result.locations);
           setShowResults(result.locations.length > 0);
+        } else {
+          const msg = String((result as any)?.message || "").toLowerCase();
+          if (msg.includes("unknown action") || msg.includes("searchlocations")) {
+            setSearchLocationApiDisabled(true);
+            setShowResults(false);
+            toast("Mode cari lokasi belum aktif di backend, pakai tombol Cari Lokasi dulu ya.", { icon: "ℹ️" });
+          }
         }
       } catch (error) {
         console.error("Location search error:", error);
+        setShowResults(false);
       } finally {
         setSearchLoading(false);
       }
@@ -108,169 +123,128 @@ export default function ScanPage() {
       </div>
 
       <div className="p-4">
-        {/* Barcode Scanner */}
-        <div className="mb-6">
-          <h2 className="text-lg font-semibold text-text-primary mb-1">
-            Scan Barcode Lokasi
-          </h2>
-          <p className="text-text-secondary text-sm mb-3">
-            Support barcode batang (1D) dan QR Code
-          </p>
-          <BarcodeScanner onScan={handleScan} active={scannerActive} />
-        </div>
-
-        <div className="flex items-center mb-4">
-          <div className="flex-1 h-px bg-border"></div>
-          <span className="px-4 text-text-secondary text-sm">ATAU</span>
-          <div className="flex-1 h-px bg-border"></div>
-        </div>
-
-        {/* Mode Toggle */}
-        <div className="flex bg-gray-100 rounded-xl p-1 mb-4">
-          <button
-            onClick={() => {
-              setSearchMode("manual");
-              setShowResults(false);
-              setLocationResults([]);
-            }}
-            className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-              searchMode === "manual"
-                ? "bg-white text-text-primary shadow-sm"
-                : "text-text-secondary"
-            }`}
-          >
-            <svg className="inline w-4 h-4 mr-1.5 -mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-            </svg>
-            Input Manual
-          </button>
-          <button
-            onClick={() => {
-              setSearchMode("search");
-              setLocationCode("");
-            }}
-            className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-              searchMode === "search"
-                ? "bg-white text-text-primary shadow-sm"
-                : "text-text-secondary"
-            }`}
-          >
-            <svg className="inline w-4 h-4 mr-1.5 -mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <div className="mb-4 relative">
+          <label className="block text-sm font-medium text-text-primary mb-2">
+            Cari / Scan Lokasi
+          </label>
+          <div className="relative">
+            <svg
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary pointer-events-none"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <circle cx="11" cy="11" r="8" />
               <path d="M21 21l-4.35-4.35" />
             </svg>
-            Cari Lokasi
-          </button>
-        </div>
-
-        {/* Manual Input Mode */}
-        {searchMode === "manual" && (
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-text-primary mb-2">
-              Kode Lokasi
-            </label>
             <input
               type="text"
               value={locationCode}
-              onChange={(e) => setLocationCode(e.target.value.toUpperCase())}
+              onChange={(e) => handleLocationSearch(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleManualSearch()}
-              className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary mb-3 bg-white"
+              className="w-full pl-11 pr-24 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary bg-white"
               placeholder="Contoh: A01-B02-C03"
               disabled={loading}
+              autoComplete="off"
             />
-            <button
-              onClick={handleManualSearch}
-              disabled={loading || !locationCode.trim()}
-              className="w-full bg-primary text-white py-3 rounded-xl font-semibold hover:bg-primary-light transition disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
-            >
-              {loading ? <LoadingSpinner /> : "Cari Lokasi"}
-            </button>
-          </div>
-        )}
-
-        {/* Search Mode */}
-        {searchMode === "search" && (
-          <div className="mb-4 relative">
-            <label className="block text-sm font-medium text-text-primary mb-2">
-              Cari Lokasi
-            </label>
-            <div className="relative">
-              <svg
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary pointer-events-none"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+              {searchLoading && (
+                <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowLocationScanner(true)}
+                className="w-9 h-9 rounded-lg border border-border bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50"
+                title="Scan barcode lokasi"
               >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2" />
+                  <path d="M7 12h10" />
+                  <path d="M7 9h2M11 9h2M15 9h2M7 15h2M11 15h2M15 15h2" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Search Results Dropdown */}
+          {showResults && locationResults.length > 0 && (
+            <div className="mt-2 bg-white border border-border rounded-xl shadow-lg overflow-hidden max-h-64 overflow-y-auto">
+              {locationResults.map((loc, index) => (
+                <button
+                  key={loc.locationCode}
+                  onClick={() => handleSelectLocation(loc)}
+                  className={`w-full flex items-center justify-between px-4 py-3 hover:bg-primary-pale transition text-left active:bg-primary/10 ${
+                    index < locationResults.length - 1 ? "border-b border-gray-100" : ""
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <svg className="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
+                        <circle cx="12" cy="10" r="3" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-text-primary text-sm">{loc.locationCode}</p>
+                      <p className="text-xs text-text-secondary">{loc.productCount} produk</p>
+                    </div>
+                  </div>
+                  <svg className="w-5 h-5 text-text-secondary flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M9 18l6-6-6-6" />
+                  </svg>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* No results */}
+          {showResults && locationResults.length === 0 && !searchLoading && locationCode.trim().length >= 1 && (
+            <div className="mt-2 bg-white border border-border rounded-xl p-4 text-center">
+              <svg className="w-8 h-8 mx-auto mb-2 text-text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <circle cx="11" cy="11" r="8" />
                 <path d="M21 21l-4.35-4.35" />
+                <path d="M8 11h6" />
               </svg>
-              <input
-                type="text"
-                value={locationCode}
-                onChange={(e) => handleLocationSearch(e.target.value.toUpperCase())}
-                className="w-full pl-11 pr-10 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary bg-white"
-                placeholder="Ketik kode lokasi, contoh: A01..."
-                disabled={loading}
-                autoFocus
-              />
-              {searchLoading && (
-                <div className="absolute right-3.5 top-1/2 -translate-y-1/2">
-                  <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
-                </div>
-              )}
+              <p className="text-sm text-text-secondary">Lokasi tidak ditemukan</p>
             </div>
+          )}
 
-            {/* Search Results Dropdown */}
-            {showResults && locationResults.length > 0 && (
-              <div className="mt-2 bg-white border border-border rounded-xl shadow-lg overflow-hidden max-h-64 overflow-y-auto">
-                {locationResults.map((loc, index) => (
-                  <button
-                    key={loc.locationCode}
-                    onClick={() => handleSelectLocation(loc)}
-                    className={`w-full flex items-center justify-between px-4 py-3 hover:bg-primary-pale transition text-left active:bg-primary/10 ${
-                      index < locationResults.length - 1 ? "border-b border-gray-100" : ""
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                        <svg className="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
-                          <circle cx="12" cy="10" r="3" />
-                        </svg>
-                      </div>
-                      <div>
-                        <p className="font-semibold text-text-primary text-sm">{loc.locationCode}</p>
-                        <p className="text-xs text-text-secondary">{loc.productCount} produk</p>
-                      </div>
-                    </div>
-                    <svg className="w-5 h-5 text-text-secondary flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M9 18l6-6-6-6" />
-                    </svg>
-                  </button>
-                ))}
+          {searchLocationApiDisabled && (
+            <p className="mt-2 text-xs text-orange-600">
+              Mode saran lokasi belum aktif di backend. Tetap bisa cari pakai tombol di bawah.
+            </p>
+          )}
+
+          {!showResults && !searchLoading && locationCode.trim().length === 0 && (
+            <p className="mt-2 text-xs text-text-secondary">
+              Ketik kode lokasi atau tap ikon scan di kanan
+            </p>
+          )}
+        </div>
+
+        <button
+          onClick={handleManualSearch}
+          disabled={loading || !locationCode.trim()}
+          className="w-full bg-primary text-white py-3 rounded-xl font-semibold hover:bg-primary-light transition disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
+        >
+          {loading ? <LoadingSpinner /> : "Cari Lokasi"}
+        </button>
+
+        {showLocationScanner && (
+          <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+            <div className="bg-white w-full max-w-md rounded-2xl p-4 shadow-2xl">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-text-primary">Scan Barcode Lokasi</h3>
+                <button
+                  onClick={() => setShowLocationScanner(false)}
+                  className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-500"
+                >
+                  ✕
+                </button>
               </div>
-            )}
-
-            {/* No results */}
-            {showResults && locationResults.length === 0 && !searchLoading && locationCode.trim().length >= 1 && (
-              <div className="mt-2 bg-white border border-border rounded-xl p-4 text-center">
-                <svg className="w-8 h-8 mx-auto mb-2 text-text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <circle cx="11" cy="11" r="8" />
-                  <path d="M21 21l-4.35-4.35" />
-                  <path d="M8 11h6" />
-                </svg>
-                <p className="text-sm text-text-secondary">Lokasi tidak ditemukan</p>
-              </div>
-            )}
-
-            {/* Hint */}
-            {!showResults && !searchLoading && locationCode.trim().length === 0 && (
-              <p className="mt-2 text-xs text-text-secondary">
-                Ketik minimal 1 karakter untuk mencari lokasi
-              </p>
-            )}
+              <BarcodeScanner onScan={handleScan} active={showLocationScanner} />
+            </div>
           </div>
         )}
       </div>
