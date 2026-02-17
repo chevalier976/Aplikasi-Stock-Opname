@@ -82,6 +82,10 @@ function doPost(e) {
         return ContentService.createTextOutput(JSON.stringify(searchProducts(data.query)))
           .setMimeType(ContentService.MimeType.JSON);
       
+      case "searchLocations":
+        return ContentService.createTextOutput(JSON.stringify(searchLocations(data.query)))
+          .setMimeType(ContentService.MimeType.JSON);
+      
       default:
         return ContentService.createTextOutput(JSON.stringify({ success: false, message: "Unknown action" }))
           .setMimeType(ContentService.MimeType.JSON);
@@ -170,6 +174,43 @@ function searchProducts(query) {
   }
   
   return { success: true, products: results };
+}
+
+/**
+ * Search locations by partial match from Master Data
+ * Returns unique locations matching the query (max 15)
+ */
+function searchLocations(query) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Master Data");
+  const data = sheet.getDataRange().getValues();
+  const results = [];
+  const seen = {};
+  const q = String(query).toLowerCase().trim();
+  
+  if (!q) return { success: true, locations: [] };
+  
+  for (let i = 1; i < data.length; i++) {
+    const location = String(data[i][0]).trim();
+    const locationLower = location.toLowerCase();
+    
+    if (locationLower.indexOf(q) !== -1 && !seen[location]) {
+      seen[location] = true;
+      
+      // Count products in this location
+      let productCount = 0;
+      for (let j = 1; j < data.length; j++) {
+        if (String(data[j][0]).trim() === location) productCount++;
+      }
+      
+      results.push({
+        locationCode: location,
+        productCount: productCount
+      });
+      if (results.length >= 15) break;
+    }
+  }
+  
+  return { success: true, locations: results };
 }
 
 /**

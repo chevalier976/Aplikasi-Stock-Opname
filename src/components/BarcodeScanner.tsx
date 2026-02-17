@@ -21,7 +21,7 @@ export default function BarcodeScanner({ onScan, active }: BarcodeScannerProps) 
 
     try {
       // Dynamically import html5-qrcode (avoid SSR issues)
-      const { Html5Qrcode } = await import("html5-qrcode");
+      const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
 
       // Clean up any existing scanner
       if (scannerRef.current) {
@@ -35,14 +35,37 @@ export default function BarcodeScanner({ onScan, active }: BarcodeScannerProps) 
       }
 
       const scannerId = "barcode-scanner-container";
-      const scanner = new Html5Qrcode(scannerId);
+
+      // Enable ALL barcode formats: 1D (batang) + 2D (QR)
+      const formatsToSupport = [
+        // 1D Barcode formats (barcode batang)
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.CODE_93,
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.UPC_E,
+        Html5QrcodeSupportedFormats.ITF,
+        Html5QrcodeSupportedFormats.CODABAR,
+        // 2D formats
+        Html5QrcodeSupportedFormats.QR_CODE,
+        Html5QrcodeSupportedFormats.DATA_MATRIX,
+        Html5QrcodeSupportedFormats.AZTEC,
+        Html5QrcodeSupportedFormats.PDF_417,
+      ];
+
+      const scanner = new Html5Qrcode(scannerId, {
+        formatsToSupport,
+        verbose: false,
+      });
       scannerRef.current = scanner;
 
       await scanner.start(
         { facingMode: "environment" },
         {
-          fps: 10,
-          qrbox: { width: 280, height: 150 },
+          fps: 15,
+          qrbox: { width: 280, height: 120 },
           aspectRatio: 16 / 9,
           disableFlip: false,
         },
@@ -60,7 +83,7 @@ export default function BarcodeScanner({ onScan, active }: BarcodeScannerProps) 
           onScan(decodedText);
         },
         () => {
-          // QR code not found in this frame - this is normal, ignore
+          // Barcode not found in this frame - normal, ignore
         }
       );
 
@@ -175,7 +198,7 @@ export default function BarcodeScanner({ onScan, active }: BarcodeScannerProps) 
           {cameraReady && (
             <div className="absolute bottom-2 left-0 right-0 flex justify-center pointer-events-none">
               <span className="bg-black/60 text-white text-xs px-3 py-1 rounded-full backdrop-blur-sm">
-                Arahkan kamera ke barcode
+                📷 Arahkan ke barcode batang / QR code
               </span>
             </div>
           )}

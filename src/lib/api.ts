@@ -112,3 +112,9 @@ export const deleteEntryApi = async (
 ): Promise<{ success: boolean; message?: string }> => {
   return apiCall("deleteEntry", { rowId });
 };
+
+export const searchLocationsApi = async (
+  query: string
+): Promise<{ success: boolean; locations?: Array<{ locationCode: string; productCount: number }> }> => {
+  return apiCall("searchLocations", { query });
+};
