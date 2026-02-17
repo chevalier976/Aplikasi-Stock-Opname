@@ -2,31 +2,73 @@ import { User, Product, HistoryEntry } from "./types";
 
 const API_URL = (process.env.NEXT_PUBLIC_APPS_SCRIPT_URL || "").trim();
 
-export const apiCall = async (action: string, data: Record<string, unknown> = {}): Promise<any> => {
+// Track active AbortControllers per action type for request cancellation
+const activeControllers: Record<string, AbortController> = {};
+
+// In-flight dedup: prevent identical concurrent requests
+const inflightRequests: Record<string, Promise<any> | undefined> = {};
+
+export const apiCall = async (
+  action: string,
+  data: Record<string, unknown> = {},
+  options?: { cancelPrevious?: boolean }
+): Promise<any> => {
   if (!API_URL) {
     console.error("NEXT_PUBLIC_APPS_SCRIPT_URL is not configured. Please set it in your .env.local file.");
     throw new Error("API URL belum dikonfigurasi. Silakan set NEXT_PUBLIC_APPS_SCRIPT_URL di file .env.local");
   }
 
-  try {
-    const response = await fetch(API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "text/plain",
-      },
-      body: JSON.stringify({ action, ...data }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const result = await response.json();
-    return result;
-  } catch (error) {
-    console.error("API call error:", error);
-    throw error;
+  // Cancel previous request of same action type if requested
+  if (options?.cancelPrevious && activeControllers[action]) {
+    activeControllers[action].abort();
+    delete activeControllers[action];
+    delete inflightRequests[action];
   }
+
+  // Dedup: if same action is already in-flight, return same promise
+  const dedupKey = action + ":" + JSON.stringify(data);
+  if (inflightRequests[dedupKey]) {
+    return inflightRequests[dedupKey];
+  }
+
+  const controller = new AbortController();
+  if (options?.cancelPrevious) {
+    activeControllers[action] = controller;
+  }
+
+  const request = (async () => {
+    try {
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/plain",
+        },
+        body: JSON.stringify({ action, ...data }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result;
+    } catch (error: any) {
+      if (error?.name === "AbortError") {
+        return { success: false, message: "Request dibatalkan" };
+      }
+      console.error("API call error:", error);
+      throw error;
+    } finally {
+      delete inflightRequests[dedupKey];
+      if (activeControllers[action] === controller) {
+        delete activeControllers[action];
+      }
+    }
+  })();
+
+  inflightRequests[dedupKey] = request;
+  return request;
 };
 
 export const loginApi = async (
@@ -104,7 +146,7 @@ export const lookupBarcodeApi = async (
 export const searchProductsApi = async (
   query: string
 ): Promise<{ success: boolean; products?: Product[] }> => {
-  return apiCall("searchProducts", { query });
+  return apiCall("searchProducts", { query }, { cancelPrevious: true });
 };
 
 export const deleteEntryApi = async (
@@ -116,7 +158,7 @@ export const deleteEntryApi = async (
 export const searchLocationsApi = async (
   query: string
 ): Promise<{ success: boolean; locations?: Array<{ locationCode: string; productCount: number }> }> => {
-  return apiCall("searchLocations", { query });
+  return apiCall("searchLocations", { query }, { cancelPrevious: true });
 };
 
 export const warmupCacheApi = async (

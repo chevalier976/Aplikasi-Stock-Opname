@@ -1,62 +1,52 @@
 // Google Apps Script for Stock Opname Backend
 // Deploy this as a Web App with "Anyone" access
 
-/**
- * Generate short random ID with prefix
- * e.g. generateShortId("SO-", 6) => "SO-A3K9X2"
- */
+// ──────────────────────────────────────────────────────────────
+// HELPERS
+// ──────────────────────────────────────────────────────────────
+
 function generateShortId(prefix, length) {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  let result = prefix;
-  for (let i = 0; i < length; i++) {
+  var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  var result = prefix;
+  for (var i = 0; i < length; i++) {
     result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return result;
 }
 
-/**
- * Format date to "dd MMM yyyy HH:mm"
- */
 function formatTimestamp(isoString) {
-  const date = new Date(isoString);
+  var date = new Date(isoString);
   return Utilities.formatDate(date, Session.getScriptTimeZone(), "dd MMM yyyy HH:mm");
 }
 
-/**
- * Get operator first name from email
- */
-function getOperatorName(email) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Users");
-  const data = sheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === email) {
-      const fullName = String(data[i][1]).trim();
-      return fullName.split(" ")[0]; // First name only
-    }
-  }
-  return email; // fallback if not found
-}
-
-/**
- * Normalize text for safer comparison
- */
 function normalizeText(value) {
   return String(value || "").trim();
 }
 
-/**
- * Normalize location code for consistent matching
- */
 function normalizeLocation(value) {
   return normalizeText(value).toUpperCase();
 }
 
-/**
- * Execute a write operation with script lock to avoid race conditions
- */
+function getOperatorName(email) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Users");
+  var data = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][0] === email) {
+      return String(data[i][1]).trim().split(" ")[0];
+    }
+  }
+  return email;
+}
+
+// ──────────────────────────────────────────────────────────────
+// LOCKING — reduced timeout, fail fast for concurrent users
+// ──────────────────────────────────────────────────────────────
+
 function withScriptLock(callback) {
-  const lock = LockService.getScriptLock();
-  lock.waitLock(20000);
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) {
+    return { success: false, message: "Server sibuk, coba lagi dalam beberapa detik" };
+  }
   try {
     return callback();
   } finally {
@@ -64,632 +54,375 @@ function withScriptLock(callback) {
   }
 }
 
-const SEARCH_CACHE_TTL_SECONDS = 20;
+// ──────────────────────────────────────────────────────────────
+// CACHE LAYER
+// ──────────────────────────────────────────────────────────────
 
-/**
- * Get current cache version for search endpoints
- */
-function getSearchCacheVersion() {
-  const props = PropertiesService.getScriptProperties();
-  return props.getProperty("SEARCH_CACHE_VERSION") || "1";
+var CACHE_TTL = 30;
+
+function cacheVersion() {
+  return PropertiesService.getScriptProperties().getProperty("CV") || "1";
 }
 
-/**
- * Invalidate search cache by bumping version
- */
-function bumpSearchCacheVersion() {
-  const props = PropertiesService.getScriptProperties();
-  props.setProperty("SEARCH_CACHE_VERSION", String(Date.now()));
+function bumpCacheVersion() {
+  PropertiesService.getScriptProperties().setProperty("CV", String(Date.now()));
 }
 
-/**
- * Build cache key for search endpoints
- */
-function buildSearchCacheKey(prefix, query) {
-  const version = getSearchCacheVersion();
-  const encoded = Utilities.base64EncodeWebSafe(String(query || "")).slice(0, 120);
-  return prefix + ":" + version + ":" + encoded;
+function cacheKey(prefix, q) {
+  return prefix + ":" + cacheVersion() + ":" + Utilities.base64EncodeWebSafe(String(q || "")).slice(0, 100);
 }
 
-/**
- * Get cached JSON object
- */
-function getCachedObject(key) {
-  const cache = CacheService.getScriptCache();
-  const raw = cache.get(key);
+function cacheGet(key) {
+  var raw = CacheService.getScriptCache().get(key);
   if (!raw) return null;
+  try { return JSON.parse(raw); } catch (e) { return null; }
+}
+
+function cachePut(key, obj, ttl) {
   try {
-    return JSON.parse(raw);
-  } catch (e) {
-    return null;
-  }
+    CacheService.getScriptCache().put(key, JSON.stringify(obj), ttl || CACHE_TTL);
+  } catch (e) { /* non-critical */ }
 }
 
-/**
- * Put JSON object into cache
- */
-function putCachedObject(key, value, ttlSeconds) {
-  const cache = CacheService.getScriptCache();
-  cache.put(key, JSON.stringify(value), ttlSeconds || SEARCH_CACHE_TTL_SECONDS);
+// ──────────────────────────────────────────────────────────────
+// MASTER DATA — single read helper
+// ──────────────────────────────────────────────────────────────
+
+function readMasterData() {
+  return SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Master Data").getDataRange().getValues();
 }
 
-/**
- * Main entry point for POST requests
- */
+// ──────────────────────────────────────────────────────────────
+// ROUTER
+// ──────────────────────────────────────────────────────────────
+
 function doPost(e) {
   try {
-    const data = JSON.parse(e.postData.contents);
-    const action = data.action;
-    
-    switch (action) {
-      case "login":
-        return ContentService.createTextOutput(JSON.stringify(login(data.email, data.password)))
-          .setMimeType(ContentService.MimeType.JSON);
-      
-      case "getProducts":
-        return ContentService.createTextOutput(JSON.stringify(getProducts(data.locationCode)))
-          .setMimeType(ContentService.MimeType.JSON);
-      
-      case "saveStockOpname":
-        return ContentService.createTextOutput(JSON.stringify(saveStockOpname(data)))
-          .setMimeType(ContentService.MimeType.JSON);
-      
-      case "getHistory":
-        return ContentService.createTextOutput(JSON.stringify(getHistory(data.operator, data.filter)))
-          .setMimeType(ContentService.MimeType.JSON);
-      
-      case "updateEntry":
-        return ContentService.createTextOutput(JSON.stringify(updateEntry(data)))
-          .setMimeType(ContentService.MimeType.JSON);
-      
-      case "deleteProduct":
-        return ContentService.createTextOutput(JSON.stringify(deleteProduct(data.locationCode, data.sku)))
-          .setMimeType(ContentService.MimeType.JSON);
-      
-      case "deleteEntry":
-        return ContentService.createTextOutput(JSON.stringify(deleteEntry(data.rowId)))
-          .setMimeType(ContentService.MimeType.JSON);
-      
-      case "lookupBarcode":
-        return ContentService.createTextOutput(JSON.stringify(lookupBarcode(data.barcode)))
-          .setMimeType(ContentService.MimeType.JSON);
-      
-      case "searchProducts":
-        return ContentService.createTextOutput(JSON.stringify(searchProducts(data.query)))
-          .setMimeType(ContentService.MimeType.JSON);
-      
-      case "searchLocations":
-        return ContentService.createTextOutput(JSON.stringify(searchLocations(data.query)))
-          .setMimeType(ContentService.MimeType.JSON);
+    var data = JSON.parse(e.postData.contents);
+    var action = data.action;
+    var result;
 
-      case "warmupCache":
-        return ContentService.createTextOutput(JSON.stringify(warmupCache(data)))
-          .setMimeType(ContentService.MimeType.JSON);
-      
-      default:
-        return ContentService.createTextOutput(JSON.stringify({ success: false, message: "Unknown action" }))
-          .setMimeType(ContentService.MimeType.JSON);
+    switch (action) {
+      case "login":           result = login(data.email, data.password); break;
+      case "getProducts":     result = getProducts(data.locationCode); break;
+      case "saveStockOpname": result = saveStockOpname(data); break;
+      case "getHistory":      result = getHistory(data.operator, data.filter); break;
+      case "updateEntry":     result = updateEntry(data); break;
+      case "deleteProduct":   result = deleteProduct(data.locationCode, data.sku); break;
+      case "deleteEntry":     result = deleteEntry(data.rowId); break;
+      case "lookupBarcode":   result = lookupBarcode(data.barcode); break;
+      case "searchProducts":  result = searchProducts(data.query); break;
+      case "searchLocations": result = searchLocations(data.query); break;
+      case "warmupCache":     result = warmupCache(data); break;
+      default:                result = { success: false, message: "Unknown action" };
     }
+
+    return ContentService.createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
   } catch (error) {
     return ContentService.createTextOutput(JSON.stringify({ success: false, message: error.toString() }))
       .setMimeType(ContentService.MimeType.JSON);
   }
 }
 
-/**
- * Authenticate user with email and password
- */
+// ──────────────────────────────────────────────────────────────
+// AUTH
+// ──────────────────────────────────────────────────────────────
+
 function login(email, password) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Users");
-  const data = sheet.getDataRange().getValues();
-  
-  for (let i = 1; i < data.length; i++) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Users");
+  var data = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
     if (data[i][0] === email && data[i][2] === password) {
-      return {
-        success: true,
-        user: {
-          email: data[i][0],
-          name: data[i][1],
-          role: data[i][3]
-        }
-      };
+      return { success: true, user: { email: data[i][0], name: data[i][1], role: data[i][3] } };
     }
   }
-  
   return { success: false, message: "Email atau password salah" };
 }
 
-/**
- * Lookup product by barcode from Master Data
- * Master Data columns: A=location, B=productName, C=sku, D=batch, E=barcode
- */
+// ──────────────────────────────────────────────────────────────
+// READ — no lock needed, cached where beneficial
+// ──────────────────────────────────────────────────────────────
+
 function lookupBarcode(barcode) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Master Data");
-  const data = sheet.getDataRange().getValues();
-  const targetBarcode = normalizeText(barcode);
-  
-  for (let i = 1; i < data.length; i++) {
-    if (normalizeText(data[i][4]) === targetBarcode) {
-      return {
-        success: true,
-        product: {
-          productName: data[i][1],
-          sku: data[i][2],
-          batch: data[i][3],
-          barcode: data[i][4]
-        }
-      };
+  var data = readMasterData();
+  var target = normalizeText(barcode);
+  for (var i = 1; i < data.length; i++) {
+    if (normalizeText(data[i][4]) === target) {
+      return { success: true, product: { productName: data[i][1], sku: data[i][2], batch: data[i][3], barcode: data[i][4] } };
     }
   }
-  
   return { success: false, message: "Produk tidak ditemukan untuk barcode: " + barcode };
 }
 
-/**
- * Search products by name across all locations in Master Data
- * Returns unique products matching the query (max 10)
- */
-function searchProducts(query) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Master Data");
-  const data = sheet.getDataRange().getValues();
-  const results = [];
-  const seen = {}; // deduplicate by SKU
-  const q = normalizeText(query).toLowerCase();
-  
+function getProducts(locationCode) {
+  var ck = cacheKey("gp", locationCode);
+  var cached = cacheGet(ck);
+  if (cached) return cached;
+
+  var data = readMasterData();
+  var products = [];
+  var target = normalizeLocation(locationCode);
+  for (var i = 1; i < data.length; i++) {
+    if (normalizeLocation(data[i][0]) === target) {
+      products.push({ productName: data[i][1], sku: data[i][2], batch: data[i][3], barcode: data[i][4] || "" });
+    }
+  }
+  var resp = products.length > 0
+    ? { success: true, products: products }
+    : { success: false, message: "Lokasi tidak ditemukan" };
+  if (products.length > 0) cachePut(ck, resp, CACHE_TTL);
+  return resp;
+}
+
+function searchProducts(query, preloadedData) {
+  var q = normalizeText(query).toLowerCase();
   if (!q) return { success: true, products: [] };
 
-  const cacheKey = buildSearchCacheKey("searchProducts", q);
-  const cached = getCachedObject(cacheKey);
+  var ck = cacheKey("sp", q);
+  var cached = cacheGet(ck);
   if (cached) return cached;
-  
-  for (let i = 1; i < data.length; i++) {
-    const productName = String(data[i][1]).toLowerCase();
-    const sku = String(data[i][2]);
-    
-    if (productName.indexOf(q) !== -1 && !seen[sku]) {
+
+  var data = preloadedData || readMasterData();
+  var results = [];
+  var seen = {};
+  for (var i = 1; i < data.length; i++) {
+    var name = String(data[i][1]).toLowerCase();
+    var sku = String(data[i][2]);
+    if (name.indexOf(q) !== -1 && !seen[sku]) {
       seen[sku] = true;
-      results.push({
-        productName: data[i][1],
-        sku: data[i][2],
-        batch: data[i][3],
-        barcode: data[i][4] || ""
-      });
+      results.push({ productName: data[i][1], sku: data[i][2], batch: data[i][3], barcode: data[i][4] || "" });
       if (results.length >= 10) break;
     }
   }
-
-  const response = { success: true, products: results };
-  putCachedObject(cacheKey, response, SEARCH_CACHE_TTL_SECONDS);
-  return response;
+  var resp = { success: true, products: results };
+  cachePut(ck, resp, CACHE_TTL);
+  return resp;
 }
 
-/**
- * Search locations by partial match from Master Data
- * Returns unique locations matching the query (max 15)
- */
-function searchLocations(query) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Master Data");
-  const data = sheet.getDataRange().getValues();
-  const results = [];
-  const q = normalizeText(query).toLowerCase();
-  
+function searchLocations(query, preloadedData) {
+  var q = normalizeText(query).toLowerCase();
   if (!q) return { success: true, locations: [] };
 
-  const cacheKey = buildSearchCacheKey("searchLocations", q);
-  const cached = getCachedObject(cacheKey);
+  var ck = cacheKey("sl", q);
+  var cached = cacheGet(ck);
   if (cached) return cached;
 
-  // Build location -> productCount map in one pass (O(n))
-  const locationCountMap = {};
-  for (let i = 1; i < data.length; i++) {
-    const location = String(data[i][0]).trim();
-    if (!location) continue;
-    locationCountMap[location] = (locationCountMap[location] || 0) + 1;
+  var data = preloadedData || readMasterData();
+  var map = {};
+  for (var i = 1; i < data.length; i++) {
+    var loc = String(data[i][0]).trim();
+    if (loc) map[loc] = (map[loc] || 0) + 1;
   }
-
-  const locations = Object.keys(locationCountMap).sort();
-  
-  for (let i = 0; i < locations.length; i++) {
-    const location = locations[i];
-    const locationLower = location.toLowerCase();
-    
-    if (locationLower.indexOf(q) !== -1) {
-      results.push({
-        locationCode: location,
-        productCount: locationCountMap[location]
-      });
+  var results = [];
+  var keys = Object.keys(map).sort();
+  for (var j = 0; j < keys.length; j++) {
+    if (keys[j].toLowerCase().indexOf(q) !== -1) {
+      results.push({ locationCode: keys[j], productCount: map[keys[j]] });
       if (results.length >= 15) break;
     }
   }
-
-  const response = { success: true, locations: results };
-  putCachedObject(cacheKey, response, SEARCH_CACHE_TTL_SECONDS);
-  return response;
+  var resp = { success: true, locations: results };
+  cachePut(ck, resp, CACHE_TTL);
+  return resp;
 }
 
-/**
- * Warm up search cache for popular/initial queries.
- * Helps first keystrokes feel instant for location and product search.
- */
-function warmupCache(data) {
+function getHistory(operator, filter) {
+  var ck = cacheKey("gh", operator + "|" + (filter || "all"));
+  var cached = cacheGet(ck);
+  if (cached) return cached;
+
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Stock Opname Results");
+  var data = sheet.getDataRange().getValues();
+  var history = [];
+  var operatorName = getOperatorName(operator);
+  var now = new Date();
+
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][3] !== operatorName) continue;
+    var ts = new Date(data[i][2]);
+    var valid = !isNaN(ts.getTime());
+    if (valid) {
+      if (filter === "today" && ts.toDateString() !== now.toDateString()) continue;
+      if (filter === "week" && ts < new Date(now.getTime() - 7 * 86400000)) continue;
+      if (filter === "month" && ts < new Date(now.getTime() - 30 * 86400000)) continue;
+    }
+    history.push({
+      sessionId: data[i][0], rowId: data[i][1], timestamp: data[i][2],
+      operator: data[i][3], location: data[i][4], productName: data[i][5],
+      sku: data[i][6], batch: data[i][7], qty: data[i][8],
+      edited: data[i][9], editTimestamp: data[i][10]
+    });
+  }
+  var resp = { success: true, history: history };
+  cachePut(ck, resp, 10);
+  return resp;
+}
+
+// ──────────────────────────────────────────────────────────────
+// WARMUP — reads Master Data ONCE, passes to search helpers
+// ──────────────────────────────────────────────────────────────
+
+function warmupCache(payload) {
   try {
-    const payload = data || {};
-    const seedLocation = normalizeText(payload.locationQuery || "").toLowerCase();
-    const seedProduct = normalizeText(payload.productQuery || "").toLowerCase();
+    payload = payload || {};
+    var seedLoc = normalizeText(payload.locationQuery || "").toLowerCase();
+    var seedProd = normalizeText(payload.productQuery || "").toLowerCase();
 
-    const queriesLocation = [];
-    const queriesProduct = [];
+    var data = readMasterData();
 
-    // Prefer explicit seed query from client
-    if (seedLocation) {
-      for (let i = 1; i <= Math.min(3, seedLocation.length); i++) {
-        queriesLocation.push(seedLocation.slice(0, i));
+    var qLoc = [], qProd = [];
+
+    if (seedLoc) {
+      for (var a = 1; a <= Math.min(3, seedLoc.length); a++) qLoc.push(seedLoc.slice(0, a));
+    }
+    if (seedProd) {
+      for (var b = 1; b <= Math.min(3, seedProd.length); b++) qProd.push(seedProd.slice(0, b));
+    }
+
+    if (qLoc.length === 0 || qProd.length === 0) {
+      var seenL = {}, seenP = {};
+      for (var c = 1; c < data.length && (qLoc.length < 4 || qProd.length < 4); c++) {
+        var l = normalizeText(data[c][0]).toLowerCase();
+        if (l && !seenL[l] && qLoc.length < 4) { seenL[l] = 1; qLoc.push(l.slice(0, 2)); }
+        var p = normalizeText(data[c][1]).toLowerCase();
+        if (p && !seenP[p] && qProd.length < 4) { seenP[p] = 1; qProd.push(p.slice(0, 2)); }
       }
     }
 
-    if (seedProduct) {
-      for (let i = 1; i <= Math.min(3, seedProduct.length); i++) {
-        queriesProduct.push(seedProduct.slice(0, i));
-      }
+    var uL = {}, uP = {};
+    for (var d = 0; d < qLoc.length; d++) {
+      var ql = qLoc[d]; if (!ql || uL[ql]) continue; uL[ql] = 1;
+      searchLocations(ql, data);
+    }
+    for (var f = 0; f < qProd.length; f++) {
+      var qp = qProd[f]; if (!qp || uP[qp]) continue; uP[qp] = 1;
+      searchProducts(qp, data);
     }
 
-    // If no seed, use lightweight default warmup from existing master data
-    if (queriesLocation.length === 0 || queriesProduct.length === 0) {
-      const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Master Data");
-      const values = sheet.getDataRange().getValues();
-
-      const seenLoc = {};
-      const seenProd = {};
-
-      for (let i = 1; i < values.length; i++) {
-        if (queriesLocation.length < 6) {
-          const loc = normalizeText(values[i][0]).toLowerCase();
-          if (loc && !seenLoc[loc]) {
-            seenLoc[loc] = true;
-            queriesLocation.push(loc.slice(0, Math.min(2, loc.length)));
-          }
-        }
-
-        if (queriesProduct.length < 6) {
-          const prod = normalizeText(values[i][1]).toLowerCase();
-          if (prod && !seenProd[prod]) {
-            seenProd[prod] = true;
-            queriesProduct.push(prod.slice(0, Math.min(2, prod.length)));
-          }
-        }
-
-        if (queriesLocation.length >= 6 && queriesProduct.length >= 6) break;
-      }
-    }
-
-    // Deduplicate and warm caches by calling search functions
-    const uniqueLoc = {};
-    const uniqueProd = {};
-
-    for (let i = 0; i < queriesLocation.length; i++) {
-      const q = normalizeText(queriesLocation[i]).toLowerCase();
-      if (!q || uniqueLoc[q]) continue;
-      uniqueLoc[q] = true;
-      searchLocations(q);
-    }
-
-    for (let i = 0; i < queriesProduct.length; i++) {
-      const q = normalizeText(queriesProduct[i]).toLowerCase();
-      if (!q || uniqueProd[q]) continue;
-      uniqueProd[q] = true;
-      searchProducts(q);
-    }
-
-    return {
-      success: true,
-      warmed: {
-        locations: Object.keys(uniqueLoc).length,
-        products: Object.keys(uniqueProd).length,
-      },
-    };
+    return { success: true, warmed: { locations: Object.keys(uL).length, products: Object.keys(uP).length } };
   } catch (error) {
-    return { success: false, message: "Warmup cache gagal: " + error };
+    return { success: false, message: "Warmup gagal: " + error };
   }
 }
 
-/**
- * Get all products for a specific location
- * Master Data columns: A=location, B=productName, C=sku, D=batch, E=barcode
- */
-function getProducts(locationCode) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Master Data");
-  const data = sheet.getDataRange().getValues();
-  const products = [];
-  const targetLocation = normalizeLocation(locationCode);
-  
-  for (let i = 1; i < data.length; i++) {
-    if (normalizeLocation(data[i][0]) === targetLocation) {
-      products.push({
-        productName: data[i][1],
-        sku: data[i][2],
-        batch: data[i][3],
-        barcode: data[i][4] || ""
-      });
-    }
-  }
-  
-  if (products.length === 0) {
-    return { success: false, message: "Lokasi tidak ditemukan" };
-  }
-  
-  return { success: true, products: products };
-}
+// ──────────────────────────────────────────────────────────────
+// WRITE — uses lock, minimal hold time
+// ──────────────────────────────────────────────────────────────
 
-/**
- * Delete a product from Master Data by location and SKU
- */
 function deleteProduct(locationCode, sku) {
-  return withScriptLock(() => deleteProductInternal(locationCode, sku));
+  return withScriptLock(function() { return deleteProductInternal(locationCode, sku); });
 }
 
-/**
- * Internal delete product (no lock). Use via deleteProduct or from already-locked flow.
- */
 function deleteProductInternal(locationCode, sku) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Master Data");
-  const data = sheet.getDataRange().getValues();
-  const targetLocation = normalizeLocation(locationCode);
-  const targetSku = normalizeText(sku);
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Master Data");
+  var data = sheet.getDataRange().getValues();
+  var tLoc = normalizeLocation(locationCode);
+  var tSku = normalizeText(sku);
 
-  const header = data[0] || ["location", "productName", "sku", "batch", "barcode"];
-  const keptRows = [];
-  let deleted = false;
-
-  for (let i = 1; i < data.length; i++) {
-    const rowLocation = normalizeLocation(data[i][0]);
-    const rowSku = normalizeText(data[i][2]);
-    if (rowLocation === targetLocation && rowSku === targetSku) {
-      deleted = true;
-      continue;
+  var count = 0;
+  for (var i = data.length - 1; i >= 1; i--) {
+    if (normalizeLocation(data[i][0]) === tLoc && normalizeText(data[i][2]) === tSku) {
+      sheet.deleteRow(i + 1);
+      count++;
     }
-    keptRows.push([data[i][0], data[i][1], data[i][2], data[i][3], data[i][4] || ""]);
   }
-
-  if (!deleted) {
-    return { success: false, message: "Produk tidak ditemukan di lokasi tersebut" };
-  }
-
-  const totalRows = sheet.getLastRow();
-  if (totalRows > 1) {
-    sheet.getRange(2, 1, totalRows - 1, 5).clearContent();
-  }
-
-  if (keptRows.length > 0) {
-    sheet.getRange(2, 1, keptRows.length, 5).setValues(keptRows);
-  }
-
-  // Ensure header is always present
-  sheet.getRange(1, 1, 1, 5).setValues([header.slice(0, 5)]);
-  bumpSearchCacheVersion();
+  if (count === 0) return { success: false, message: "Produk tidak ditemukan di lokasi tersebut" };
+  bumpCacheVersion();
   return { success: true, message: "Produk berhasil dihapus dari lokasi" };
 }
 
-/**
- * Save stock opname data and sync Master Data
- */
 function saveStockOpname(data) {
-  return withScriptLock(() => {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Stock Opname Results");
-
+  return withScriptLock(function() {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Stock Opname Results");
     if (!data.items || !Array.isArray(data.items) || data.items.length === 0) {
       return { success: false, message: "Tidak ada item untuk disimpan" };
     }
 
-    // Generate shorter session ID
-    const sessionId = generateShortId("SO-", 6);
+    var sessionId = generateShortId("SO-", 6);
+    var timestamp = formatTimestamp(data.timestamp);
+    var operatorName = getOperatorName(data.operator);
+    var loc = normalizeLocation(data.location);
 
-    // Format timestamp: dd MMM yyyy HH:mm
-    const timestamp = formatTimestamp(data.timestamp);
+    var rows = data.items.map(function(item) {
+      return [sessionId, generateShortId("R-", 6), timestamp, operatorName, loc,
+              item.productName, item.sku, item.batch, item.qty, "No", ""];
+    });
 
-    // Get operator first name
-    const operatorName = getOperatorName(data.operator);
-
-    // Batch build rows for faster writes
-    const rows = data.items.map(item => [
-      sessionId,
-      generateShortId("R-", 6),
-      timestamp,
-      operatorName,
-      normalizeLocation(data.location),
-      item.productName,
-      item.sku,
-      item.batch,
-      item.qty,
-      "No",  // edited
-      ""     // editTimestamp
-    ]);
-
-    const startRow = sheet.getLastRow() + 1;
-    sheet.getRange(startRow, 1, rows.length, 11).setValues(rows);
-
-    // Sync Master Data after saving stock opname
-    syncMasterDataInternal(normalizeLocation(data.location), data.items);
-
+    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, 11).setValues(rows);
+    syncMasterDataInternal(loc, data.items);
+    bumpCacheVersion();
     return { success: true, message: "Stock opname berhasil disimpan" };
   });
 }
 
-/**
- * Synchronize Master Data based on stock opname results
- * - Add new products (isNew: true)
- * - Remove products not in the items list (qty = 0 or deleted)
- */
 function syncMasterData(locationCode, items) {
-  return withScriptLock(() => syncMasterDataInternal(locationCode, items));
+  return withScriptLock(function() { return syncMasterDataInternal(locationCode, items); });
 }
 
-/**
- * Internal sync Master Data (no lock). Use via syncMasterData or from already-locked flow.
- */
 function syncMasterDataInternal(locationCode, items) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Master Data");
-  const data = sheet.getDataRange().getValues();
-  const normalizedLocation = normalizeLocation(locationCode);
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Master Data");
+  var data = sheet.getDataRange().getValues();
+  var loc = normalizeLocation(locationCode);
 
-  // Keep only rows from other locations
-  const keptRows = [];
-  for (let i = 1; i < data.length; i++) {
-    const rowLocation = normalizeLocation(data[i][0]);
-    if (rowLocation !== normalizedLocation) {
-      keptRows.push([data[i][0], data[i][1], data[i][2], data[i][3], data[i][4] || ""]);
-    }
+  var existing = {};
+  for (var i = 1; i < data.length; i++) {
+    if (normalizeLocation(data[i][0]) === loc) existing[normalizeText(data[i][2])] = true;
   }
 
-  // Build current location rows from latest opname items
-  const itemMapBySku = {};
-  (items || []).forEach(item => {
-    const sku = normalizeText(item.sku);
-    if (!sku) return;
-    itemMapBySku[sku] = item;
+  var newRows = [];
+  var seen = {};
+  (items || []).forEach(function(item) {
+    var sku = normalizeText(item.sku);
+    if (!sku || existing[sku] || seen[sku]) return;
+    seen[sku] = true;
+    newRows.push([loc, item.productName || "", sku, item.batch || "", item.barcode || ""]);
   });
 
-  const locationRows = Object.keys(itemMapBySku).map(sku => {
-    const item = itemMapBySku[sku];
-    return [
-      normalizedLocation,
-      item.productName || "",
-      sku,
-      item.batch || "",
-      item.barcode || ""
-    ];
-  });
-
-  const allRows = keptRows.concat(locationRows);
-  const header = data[0] || ["location", "productName", "sku", "batch", "barcode"];
-
-  // Clear previous data rows, then write fresh rows in batch
-  const totalRows = sheet.getLastRow();
-  if (totalRows > 1) {
-    sheet.getRange(2, 1, totalRows - 1, 5).clearContent();
+  if (newRows.length > 0) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, 5).setValues(newRows);
+    bumpCacheVersion();
   }
-
-  // Ensure header remains
-  sheet.getRange(1, 1, 1, 5).setValues([header.slice(0, 5)]);
-
-  if (allRows.length > 0) {
-    sheet.getRange(2, 1, allRows.length, 5).setValues(allRows);
-  }
-
-  // Invalidate cached search results since master data changed
-  bumpSearchCacheVersion();
 }
 
-/**
- * Get stock opname history for a specific operator with optional filter
- */
-function getHistory(operator, filter) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Stock Opname Results");
-  const data = sheet.getDataRange().getValues();
-  const history = [];
-  
-  // Resolve email to first name for matching
-  const operatorName = getOperatorName(operator);
-  
-  const now = new Date();
-  
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][3] === operatorName) {
-      const timestamp = new Date(data[i][2]);
-      
-      // Apply filter (skip if timestamp is invalid)
-      if (isNaN(timestamp.getTime())) {
-        // If date can't be parsed, include it anyway
-      } else {
-        if (filter === "today") {
-          if (timestamp.toDateString() !== now.toDateString()) continue;
-        } else if (filter === "week") {
-          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-          if (timestamp < weekAgo) continue;
-        } else if (filter === "month") {
-          const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-          if (timestamp < monthAgo) continue;
-        }
-      }
-      
-      history.push({
-        sessionId: data[i][0],
-        rowId: data[i][1],
-        timestamp: data[i][2],
-        operator: data[i][3],
-        location: data[i][4],
-        productName: data[i][5],
-        sku: data[i][6],
-        batch: data[i][7],
-        qty: data[i][8],
-        edited: data[i][9],
-        editTimestamp: data[i][10]
-      });
-    }
-  }
-  
-  return { success: true, history: history };
-}
-
-/**
- * Update a specific entry (qty, productName, sku, batch)
- */
 function updateEntry(data) {
-  return withScriptLock(() => {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Stock Opname Results");
-    const values = sheet.getDataRange().getValues();
+  return withScriptLock(function() {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Stock Opname Results");
+    var values = sheet.getDataRange().getValues();
 
-    for (let i = 1; i < values.length; i++) {
+    for (var i = 1; i < values.length; i++) {
       if (values[i][1] === data.rowId) {
-        const row = values[i].slice();
-
-        // Update productName if provided (col F index 5)
+        var row = values[i].slice();
         if (data.productName !== undefined) row[5] = data.productName;
-        // Update sku if provided (col G index 6)
         if (data.sku !== undefined) row[6] = data.sku;
-        // Update batch if provided (col H index 7)
         if (data.batch !== undefined) row[7] = data.batch;
-
-        // Update qty, edited, and edit timestamp
         row[8] = data.newQty;
         row[9] = "Yes";
         row[10] = formatTimestamp(data.editTimestamp);
-
         sheet.getRange(i + 1, 1, 1, row.length).setValues([row]);
+        bumpCacheVersion();
         return { success: true, message: "Entry berhasil diupdate" };
       }
     }
-
     return { success: false, message: "Entry tidak ditemukan" };
   });
 }
 
-/**
- * Delete a specific entry from Stock Opname Results by rowId
- * Also removes the corresponding product from Master Data
- */
 function deleteEntry(rowId) {
-  return withScriptLock(() => {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Stock Opname Results");
-    const values = sheet.getDataRange().getValues();
+  return withScriptLock(function() {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Stock Opname Results");
+    var values = sheet.getDataRange().getValues();
 
-    for (let i = 1; i < values.length; i++) {
+    for (var i = 1; i < values.length; i++) {
       if (values[i][1] === rowId) {
-        // Get location and SKU before deleting
-        const location = values[i][4];
-        const sku = values[i][6];
-
-        // Delete from Stock Opname Results
+        var location = values[i][4];
+        var sku = values[i][6];
         sheet.deleteRow(i + 1);
-
-        // Also delete from Master Data (internal no-lock because already locked)
-        if (location && sku) {
-          deleteProductInternal(location, sku);
-        }
-
+        if (location && sku) deleteProductInternal(location, sku);
+        bumpCacheVersion();
         return { success: true, message: "Entry dan Master Data berhasil dihapus" };
       }
     }
-
     return { success: false, message: "Entry tidak ditemukan" };
   });
 }

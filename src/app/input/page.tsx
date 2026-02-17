@@ -124,10 +124,6 @@ function InputPageContent() {
 
   const handleProductNameSearch = (value: string) => {
     setNewProductForm((prev) => ({ ...prev, productName: value }));
-
-    if (value.trim().length >= 1) {
-      warmupCacheApi({ productQuery: value.trim() }).catch(() => {});
-    }
     
     if (searchTimer) clearTimeout(searchTimer);
     

@@ -80,11 +80,6 @@ export default function ScanPage() {
     const normalized = normalizeLocationCode(value);
     setLocationCode(normalized);
 
-    // Warmup per first prefix once user starts typing
-    if (normalized.length >= 1) {
-      warmupCacheApi({ locationQuery: normalized }).catch(() => {});
-    }
-
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
 
     if (normalized.length < 1) {
