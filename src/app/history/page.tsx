@@ -224,54 +224,49 @@ export default function HistoryPage() {
                   key={sessionId}
                   className="bg-white rounded-lg shadow-md overflow-hidden"
                 >
-                  <div className="bg-primary-pale px-4 py-3 border-b border-border">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <p className="font-semibold text-text-primary text-sm">
-                          {firstEntry.location} • {formatDate(firstEntry.timestamp)}
-                        </p>
-                        <p className="text-xs text-text-secondary">
-                          {sessionId} • {entries.length} produk • {totalItems} item
-                        </p>
-                      </div>
-                    </div>
+                  <div className="bg-primary-pale px-3 py-2 border-b border-border">
+                    <p className="font-semibold text-text-primary text-xs">
+                      {firstEntry.location} • {formatDate(firstEntry.timestamp)}
+                    </p>
+                    <p className="text-[10px] text-text-secondary">
+                      {sessionId} • {entries.length} produk • {totalItems} item
+                    </p>
                   </div>
 
-                  {/* Table header */}
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
+                    <table className="w-full text-xs">
                       <thead>
                         <tr className="bg-gray-50 border-b border-border">
-                          <th className="text-left px-3 py-2 font-semibold text-text-secondary whitespace-nowrap">Produk</th>
-                          <th className="text-left px-3 py-2 font-semibold text-text-secondary whitespace-nowrap">SKU</th>
-                          <th className="text-left px-3 py-2 font-semibold text-text-secondary whitespace-nowrap">Batch</th>
-                          <th className="text-center px-3 py-2 font-semibold text-text-secondary whitespace-nowrap">Qty</th>
-                          <th className="text-center px-3 py-2 font-semibold text-text-secondary whitespace-nowrap">Aksi</th>
+                          <th className="text-left px-2 py-1 font-semibold text-text-secondary whitespace-nowrap">Produk</th>
+                          <th className="text-left px-2 py-1 font-semibold text-text-secondary whitespace-nowrap">SKU</th>
+                          <th className="text-left px-2 py-1 font-semibold text-text-secondary whitespace-nowrap">Batch</th>
+                          <th className="text-center px-2 py-1 font-semibold text-text-secondary whitespace-nowrap">Qty</th>
+                          <th className="text-center px-1 py-1 font-semibold text-text-secondary whitespace-nowrap">Aksi</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
                         {entries.map((entry) => (
                           <tr key={entry.rowId} className="hover:bg-gray-50">
-                            <td className="px-3 py-2 text-text-primary">
-                              <span className="font-medium">{entry.productName}</span>
+                            <td className="px-2 py-1 text-text-primary max-w-[120px]">
+                              <span className="block truncate font-medium" title={entry.productName}>{entry.productName}</span>
                               {entry.edited === "Yes" && (
-                                <span className="ml-1 text-xs text-orange-500" title={`Diedit: ${entry.editTimestamp}`}>✏️</span>
+                                <span className="text-[10px] text-orange-500" title={`Diedit: ${entry.editTimestamp}`}>✏️</span>
                               )}
                             </td>
-                            <td className="px-3 py-2 text-text-secondary whitespace-nowrap">{entry.sku}</td>
-                            <td className="px-3 py-2 text-text-secondary whitespace-nowrap">{entry.batch}</td>
-                            <td className="px-3 py-2 text-center font-semibold text-primary">{entry.qty}</td>
-                            <td className="px-3 py-2 text-center whitespace-nowrap">
-                              <div className="flex items-center justify-center gap-1">
+                            <td className="px-2 py-1 text-text-secondary whitespace-nowrap">{entry.sku}</td>
+                            <td className="px-2 py-1 text-text-secondary whitespace-nowrap">{entry.batch}</td>
+                            <td className="px-2 py-1 text-center font-semibold text-primary">{entry.qty}</td>
+                            <td className="px-1 py-1 text-center whitespace-nowrap">
+                              <div className="flex items-center justify-center gap-0.5">
                                 <button
                                   onClick={() => handleEdit(entry)}
-                                  className="px-2 py-1 bg-primary text-white text-xs rounded hover:bg-primary-light transition"
+                                  className="px-1.5 py-0.5 bg-primary text-white text-[10px] rounded hover:bg-primary-light transition"
                                 >
                                   Edit
                                 </button>
                                 <button
                                   onClick={() => handleDelete(entry)}
-                                  className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 transition"
+                                  className="px-1.5 py-0.5 bg-red-500 text-white text-[10px] rounded hover:bg-red-600 transition"
                                 >
                                   Hapus
                                 </button>

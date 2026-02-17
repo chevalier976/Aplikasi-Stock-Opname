@@ -4,7 +4,6 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import BottomNav from "@/components/BottomNav";
-import ProductCard from "@/components/ProductCard";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import BarcodeScanner from "@/components/BarcodeScanner";
 import { getProductsApi, saveStockOpnameApi, deleteProductApi, lookupBarcodeApi, searchProductsApi, warmupCacheApi } from "@/lib/api";
@@ -12,6 +11,34 @@ import { Product } from "@/lib/types";
 import { getCache, setCache, clearCache } from "@/lib/cache";
 import toast from "react-hot-toast";
 import BrandBLP from "@/components/BrandBLP";
+
+function QtyInput({ value, onChange, className }: { value: number; onChange: (v: number) => void; className?: string }) {
+  const [display, setDisplay] = useState(String(value));
+  useEffect(() => { setDisplay(String(value)); }, [value]);
+  return (
+    <input
+      type="number"
+      value={display}
+      onChange={(e) => {
+        setDisplay(e.target.value);
+        const num = parseInt(e.target.value);
+        if (!isNaN(num) && num >= 0) onChange(num);
+      }}
+      onFocus={(e) => {
+        if (display === "0") setDisplay("");
+        e.target.select();
+      }}
+      onBlur={() => {
+        if (display === "" || isNaN(parseInt(display))) {
+          setDisplay("0");
+          onChange(0);
+        }
+      }}
+      className={className || "w-12 h-7 text-center border border-border rounded text-xs font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"}
+      min="0"
+    />
+  );
+}
 
 function InputPageContent() {
   const { user } = useAuth();
@@ -273,8 +300,7 @@ function InputPageContent() {
     toast.success("Produk baru berhasil ditambahkan");
   };
 
-  const handleSave = async () => {
-    // Prepare items with quantities > 0
+  const handleSave = () => {
     const existingItems = products
       .filter((product) => quantities[product.sku] > 0)
       .map((product) => ({
@@ -305,33 +331,21 @@ function InputPageContent() {
     }
 
     setSaving(true);
-    try {
-      const sessionId = `${user?.email}_${Date.now()}`;
-      const timestamp = new Date().toISOString();
+    const sessionId = `${user?.email}_${Date.now()}`;
+    const timestamp = new Date().toISOString();
 
-      const result = await saveStockOpnameApi(
-        sessionId,
-        user?.email || "",
-        location,
-        timestamp,
-        items
-      );
+    // Fire save in background (AppSheet-style optimistic)
+    saveStockOpnameApi(sessionId, user?.email || "", location, timestamp, items)
+      .then((result) => {
+        if (!result.success) toast.error(result.message || "Gagal sinkron ke server");
+      })
+      .catch(() => toast.error("Gagal sinkron ke server"));
 
-      if (result.success) {
-        // Invalidate caches after save
-        clearCache("history:");
-        clearCache("products:");
-        toast.success("Stock opname berhasil disimpan!");
-        router.push("/scan");
-      } else {
-        toast.error(result.message || "Gagal menyimpan stock opname");
-      }
-    } catch (error) {
-      console.error("Save error:", error);
-      toast.error("Terjadi kesalahan saat menyimpan");
-    } finally {
-      setSaving(false);
-    }
+    // Navigate immediately — don't wait for server
+    clearCache("history:");
+    clearCache("products:");
+    toast.success("Stock opname berhasil disimpan!");
+    router.push("/scan");
   };
 
   if (loading) {
@@ -520,16 +534,10 @@ function InputPageContent() {
                 <label className="block text-sm font-medium text-text-primary mb-1">
                   Quantity
                 </label>
-                <input
-                  type="number"
-                  min="0"
+                <QtyInput
                   value={newProductForm.qty}
-                  onChange={(e) => {
-                    const value = e.target.value === "" ? 0 : parseInt(e.target.value);
-                    setNewProductForm({ ...newProductForm, qty: isNaN(value) ? 0 : value });
-                  }}
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                  placeholder="Masukkan quantity"
+                  onChange={(v) => setNewProductForm({ ...newProductForm, qty: v })}
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
               <button
@@ -562,33 +570,68 @@ function InputPageContent() {
           </div>
         )}
 
-        <div className="mb-4">
-          {products.map((product) => (
-            <ProductCard
-              key={`${product.sku}-${product.batch}`}
-              product={product}
-              quantity={quantities[`${product.sku}-${product.batch}`] || quantities[product.sku] || 0}
-              onChange={handleQuantityChange}
-              onDelete={handleDeleteProduct}
-            />
-          ))}
-          {newProducts.length > 0 && (
-            <>
-              <div className="my-4 border-t-2 border-primary pt-2">
-                <h3 className="text-lg font-semibold text-primary mb-2">Produk Baru</h3>
-              </div>
-              {newProducts.map((product) => (
-                <ProductCard
-                  key={`${product.sku}-${product.batch}`}
-                  product={product}
-                  quantity={quantities[`${product.sku}-${product.batch}`] || quantities[product.sku] || 0}
-                  onChange={handleQuantityChange}
-                  onDelete={handleDeleteNewProduct}
-                />
-              ))}
-            </>
-          )}
+        {allProducts.length > 0 && (
+        <div className="mb-4 bg-white rounded-lg shadow-md overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-gray-50 border-b border-border">
+                  <th className="text-left px-2 py-1.5 font-semibold text-text-secondary whitespace-nowrap">Produk</th>
+                  <th className="text-left px-2 py-1.5 font-semibold text-text-secondary whitespace-nowrap">SKU</th>
+                  <th className="text-left px-2 py-1.5 font-semibold text-text-secondary whitespace-nowrap">Batch</th>
+                  <th className="text-center px-2 py-1.5 font-semibold text-text-secondary whitespace-nowrap">Qty</th>
+                  <th className="px-1 py-1.5"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {products.map((product) => (
+                  <tr key={`${product.sku}-${product.batch}`} className="hover:bg-gray-50">
+                    <td className="px-2 py-1.5 text-text-primary font-medium max-w-[140px]">
+                      <span className="block truncate" title={product.productName}>{product.productName}</span>
+                    </td>
+                    <td className="px-2 py-1.5 text-text-secondary whitespace-nowrap">{product.sku}</td>
+                    <td className="px-2 py-1.5 text-text-secondary whitespace-nowrap">{product.batch}</td>
+                    <td className="px-1 py-1 text-center">
+                      <div className="flex items-center justify-center gap-0.5">
+                        <button onClick={() => handleQuantityChange(product.sku, Math.max(0, (quantities[product.sku] || 0) - 1))} className="w-6 h-6 rounded bg-primary-pale text-primary text-xs font-bold hover:bg-primary-light hover:text-white transition">−</button>
+                        <QtyInput value={quantities[product.sku] || 0} onChange={(v) => handleQuantityChange(product.sku, v)} />
+                        <button onClick={() => handleQuantityChange(product.sku, (quantities[product.sku] || 0) + 1)} className="w-6 h-6 rounded bg-primary-pale text-primary text-xs font-bold hover:bg-primary-light hover:text-white transition">+</button>
+                      </div>
+                    </td>
+                    <td className="px-1 py-1 text-center">
+                      <button onClick={() => handleDeleteProduct(product.sku)} className="w-5 h-5 rounded-full bg-red-100 text-red-600 hover:bg-red-500 hover:text-white text-[10px] font-bold transition" title="Hapus">✕</button>
+                    </td>
+                  </tr>
+                ))}
+                {newProducts.length > 0 && (
+                  <tr className="bg-primary-pale">
+                    <td colSpan={5} className="px-2 py-1 text-xs font-semibold text-primary">Produk Baru</td>
+                  </tr>
+                )}
+                {newProducts.map((product) => (
+                  <tr key={`new-${product.sku}-${product.batch}`} className="hover:bg-gray-50 bg-blue-50/30">
+                    <td className="px-2 py-1.5 text-text-primary font-medium max-w-[140px]">
+                      <span className="block truncate" title={product.productName}>{product.productName}</span>
+                    </td>
+                    <td className="px-2 py-1.5 text-text-secondary whitespace-nowrap">{product.sku}</td>
+                    <td className="px-2 py-1.5 text-text-secondary whitespace-nowrap">{product.batch}</td>
+                    <td className="px-1 py-1 text-center">
+                      <div className="flex items-center justify-center gap-0.5">
+                        <button onClick={() => handleQuantityChange(product.sku, Math.max(0, (quantities[product.sku] || 0) - 1))} className="w-6 h-6 rounded bg-primary-pale text-primary text-xs font-bold hover:bg-primary-light hover:text-white transition">−</button>
+                        <QtyInput value={quantities[product.sku] || 0} onChange={(v) => handleQuantityChange(product.sku, v)} />
+                        <button onClick={() => handleQuantityChange(product.sku, (quantities[product.sku] || 0) + 1)} className="w-6 h-6 rounded bg-primary-pale text-primary text-xs font-bold hover:bg-primary-light hover:text-white transition">+</button>
+                      </div>
+                    </td>
+                    <td className="px-1 py-1 text-center">
+                      <button onClick={() => handleDeleteNewProduct(product.sku)} className="w-5 h-5 rounded-full bg-red-100 text-red-600 hover:bg-red-500 hover:text-white text-[10px] font-bold transition" title="Hapus">✕</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
+        )}
 
         <div className="fixed bottom-20 left-0 right-0 p-4 bg-white border-t border-border">
           <button
