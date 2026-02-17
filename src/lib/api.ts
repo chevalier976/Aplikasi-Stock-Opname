@@ -118,3 +118,9 @@ export const searchLocationsApi = async (
 ): Promise<{ success: boolean; locations?: Array<{ locationCode: string; productCount: number }> }> => {
   return apiCall("searchLocations", { query });
 };
+
+export const warmupCacheApi = async (
+  payload: { locationQuery?: string; productQuery?: string } = {}
+): Promise<{ success: boolean; warmed?: { locations: number; products: number }; message?: string }> => {
+  return apiCall("warmupCache", payload);
+};

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import BrandBLP from "@/components/BrandBLP";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -44,7 +45,7 @@ export default function LoginPage() {
       <div className="bg-white rounded-lg shadow-lg p-8 w-full max-w-md">
         <div className="text-center mb-8">
           <div className="w-20 h-20 bg-primary rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-white text-3xl font-bold">SO</span>
+            <BrandBLP compact className="text-white text-2xl" />
           </div>
           <h1 className="text-2xl font-bold text-text-primary mb-2">
             Selamat Datang

@@ -8,6 +8,7 @@ import LoadingSpinner from "@/components/LoadingSpinner";
 import { getHistoryApi, updateEntryApi, deleteEntryApi } from "@/lib/api";
 import { HistoryEntry } from "@/lib/types";
 import toast from "react-hot-toast";
+import BrandBLP from "@/components/BrandBLP";
 
 export default function HistoryPage() {
   const { user } = useAuth();
@@ -139,7 +140,8 @@ export default function HistoryPage() {
   return (
     <div className="min-h-screen pb-20">
       <div className="bg-primary text-white p-6 shadow-md">
-        <h1 className="text-2xl font-bold mb-1">Riwayat Stock Opname</h1>
+        <div className="mb-1"><BrandBLP className="text-white text-2xl" /></div>
+        <h1 className="text-xl font-bold mb-1">Riwayat Stock Opname</h1>
         <p className="text-primary-pale">{user?.name || "User"}</p>
       </div>
 

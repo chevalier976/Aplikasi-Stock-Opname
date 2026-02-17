@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import BrandBLP from "./BrandBLP";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -89,11 +90,11 @@ export default function InstallPrompt() {
         <div className="px-5 pt-5 pb-3 flex items-center gap-3">
           <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg"
                style={{ backgroundColor: "var(--primary)" }}>
-            SO
+            <BrandBLP compact className="text-white text-sm" />
           </div>
           <div className="flex-1">
             <h3 className="font-semibold text-[var(--text-primary)] text-base">
-              Install Stock Opname
+              Install BLP Stock
             </h3>
             <p className="text-sm text-[var(--text-secondary)]">
               Tambahkan ke layar utama

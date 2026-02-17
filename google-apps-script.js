@@ -161,6 +161,10 @@ function doPost(e) {
       case "searchLocations":
         return ContentService.createTextOutput(JSON.stringify(searchLocations(data.query)))
           .setMimeType(ContentService.MimeType.JSON);
+
+      case "warmupCache":
+        return ContentService.createTextOutput(JSON.stringify(warmupCache(data)))
+          .setMimeType(ContentService.MimeType.JSON);
       
       default:
         return ContentService.createTextOutput(JSON.stringify({ success: false, message: "Unknown action" }))
@@ -301,6 +305,91 @@ function searchLocations(query) {
   const response = { success: true, locations: results };
   putCachedObject(cacheKey, response, SEARCH_CACHE_TTL_SECONDS);
   return response;
+}
+
+/**
+ * Warm up search cache for popular/initial queries.
+ * Helps first keystrokes feel instant for location and product search.
+ */
+function warmupCache(data) {
+  try {
+    const payload = data || {};
+    const seedLocation = normalizeText(payload.locationQuery || "").toLowerCase();
+    const seedProduct = normalizeText(payload.productQuery || "").toLowerCase();
+
+    const queriesLocation = [];
+    const queriesProduct = [];
+
+    // Prefer explicit seed query from client
+    if (seedLocation) {
+      for (let i = 1; i <= Math.min(3, seedLocation.length); i++) {
+        queriesLocation.push(seedLocation.slice(0, i));
+      }
+    }
+
+    if (seedProduct) {
+      for (let i = 1; i <= Math.min(3, seedProduct.length); i++) {
+        queriesProduct.push(seedProduct.slice(0, i));
+      }
+    }
+
+    // If no seed, use lightweight default warmup from existing master data
+    if (queriesLocation.length === 0 || queriesProduct.length === 0) {
+      const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Master Data");
+      const values = sheet.getDataRange().getValues();
+
+      const seenLoc = {};
+      const seenProd = {};
+
+      for (let i = 1; i < values.length; i++) {
+        if (queriesLocation.length < 6) {
+          const loc = normalizeText(values[i][0]).toLowerCase();
+          if (loc && !seenLoc[loc]) {
+            seenLoc[loc] = true;
+            queriesLocation.push(loc.slice(0, Math.min(2, loc.length)));
+          }
+        }
+
+        if (queriesProduct.length < 6) {
+          const prod = normalizeText(values[i][1]).toLowerCase();
+          if (prod && !seenProd[prod]) {
+            seenProd[prod] = true;
+            queriesProduct.push(prod.slice(0, Math.min(2, prod.length)));
+          }
+        }
+
+        if (queriesLocation.length >= 6 && queriesProduct.length >= 6) break;
+      }
+    }
+
+    // Deduplicate and warm caches by calling search functions
+    const uniqueLoc = {};
+    const uniqueProd = {};
+
+    for (let i = 0; i < queriesLocation.length; i++) {
+      const q = normalizeText(queriesLocation[i]).toLowerCase();
+      if (!q || uniqueLoc[q]) continue;
+      uniqueLoc[q] = true;
+      searchLocations(q);
+    }
+
+    for (let i = 0; i < queriesProduct.length; i++) {
+      const q = normalizeText(queriesProduct[i]).toLowerCase();
+      if (!q || uniqueProd[q]) continue;
+      uniqueProd[q] = true;
+      searchProducts(q);
+    }
+
+    return {
+      success: true,
+      warmed: {
+        locations: Object.keys(uniqueLoc).length,
+        products: Object.keys(uniqueProd).length,
+      },
+    };
+  } catch (error) {
+    return { success: false, message: "Warmup cache gagal: " + error };
+  }
 }
 
 /**

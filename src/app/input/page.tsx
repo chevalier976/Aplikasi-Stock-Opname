@@ -7,9 +7,10 @@ import BottomNav from "@/components/BottomNav";
 import ProductCard from "@/components/ProductCard";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import BarcodeScanner from "@/components/BarcodeScanner";
-import { getProductsApi, saveStockOpnameApi, deleteProductApi, lookupBarcodeApi, searchProductsApi } from "@/lib/api";
+import { getProductsApi, saveStockOpnameApi, deleteProductApi, lookupBarcodeApi, searchProductsApi, warmupCacheApi } from "@/lib/api";
 import { Product } from "@/lib/types";
 import toast from "react-hot-toast";
+import BrandBLP from "@/components/BrandBLP";
 
 function InputPageContent() {
   const { user } = useAuth();
@@ -35,6 +36,12 @@ function InputPageContent() {
   const [searchResults, setSearchResults] = useState<Product[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [searchTimer, setSearchTimer] = useState<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    warmupCacheApi().catch(() => {
+      // best effort warmup
+    });
+  }, []);
 
   useEffect(() => {
     if (!location) {
@@ -117,6 +124,10 @@ function InputPageContent() {
 
   const handleProductNameSearch = (value: string) => {
     setNewProductForm((prev) => ({ ...prev, productName: value }));
+
+    if (value.trim().length >= 1) {
+      warmupCacheApi({ productQuery: value.trim() }).catch(() => {});
+    }
     
     if (searchTimer) clearTimeout(searchTimer);
     
@@ -277,7 +288,7 @@ function InputPageContent() {
 
       if (result.success) {
         toast.success("Stock opname berhasil disimpan!");
-        router.push("/history");
+        router.push("/scan");
       } else {
         toast.error(result.message || "Gagal menyimpan stock opname");
       }
@@ -303,7 +314,8 @@ function InputPageContent() {
   return (
     <div className="min-h-screen pb-32">
       <div className="bg-primary text-white p-6 shadow-md">
-        <h1 className="text-2xl font-bold mb-1">Input Quantity</h1>
+        <div className="mb-1"><BrandBLP className="text-white text-2xl" /></div>
+        <h1 className="text-xl font-bold mb-1">Input Quantity</h1>
         <p className="text-primary-pale">Lokasi: {location}</p>
       </div>
 

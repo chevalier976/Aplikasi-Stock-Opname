@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import BarcodeScanner from "@/components/BarcodeScanner";
 import BottomNav from "@/components/BottomNav";
-import { getProductsApi, searchLocationsApi } from "@/lib/api";
+import { getProductsApi, searchLocationsApi, warmupCacheApi } from "@/lib/api";
 import toast from "react-hot-toast";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import BrandBLP from "@/components/BrandBLP";
 
 type LocationResult = {
   locationCode: string;
@@ -27,8 +28,17 @@ export default function ScanPage() {
   const [showResults, setShowResults] = useState(false);
   const [searchLocationApiDisabled, setSearchLocationApiDisabled] = useState(false);
   const searchTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const warmedRef = useRef(false);
 
   const normalizeLocationCode = (value: string) => value.toUpperCase().replace(/\s+/g, "").trim();
+
+  useEffect(() => {
+    if (warmedRef.current) return;
+    warmedRef.current = true;
+    warmupCacheApi().catch(() => {
+      // best-effort warmup, no need to block UI
+    });
+  }, []);
 
   const handleScan = async (code: string) => {
     if (isSearching) return;
@@ -69,6 +79,11 @@ export default function ScanPage() {
   const handleLocationSearch = (value: string) => {
     const normalized = normalizeLocationCode(value);
     setLocationCode(normalized);
+
+    // Warmup per first prefix once user starts typing
+    if (normalized.length >= 1) {
+      warmupCacheApi({ locationQuery: normalized }).catch(() => {});
+    }
 
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
 
@@ -118,7 +133,7 @@ export default function ScanPage() {
   return (
     <div className="min-h-screen pb-20">
       <div className="bg-primary text-white p-6 shadow-md">
-        <h1 className="text-2xl font-bold mb-1">Stock Opname</h1>
+        <div className="mb-1"><BrandBLP className="text-white text-2xl" /></div>
         <p className="text-primary-pale">Halo, {user?.name || "User"}</p>
       </div>
 
