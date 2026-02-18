@@ -12,31 +12,81 @@ import { getCache, setCache, clearCache } from "@/lib/cache";
 import toast from "react-hot-toast";
 import BrandBLP from "@/components/BrandBLP";
 
-function QtyInput({ value, onChange, className }: { value: number; onChange: (v: number) => void; className?: string }) {
+function calcExpr(expr: string): number | null {
+  // Normalize: replace x/X/× with *, remove spaces
+  const s = expr.replace(/[xX×]/g, "*").replace(/\s+/g, "");
+  // Only allow digits, +, -, *, . — reject anything else
+  if (!s || !/^[\d+\-*.]+$/.test(s)) return null;
+  // Must start & end with digit
+  if (!/^\d/.test(s) || !/\d$/.test(s)) return null;
+  try {
+    // Safe eval: only math operators
+    const result = new Function("return (" + s + ")")() as number;
+    if (typeof result !== "number" || !isFinite(result)) return null;
+    return Math.max(0, Math.round(result));
+  } catch { return null; }
+}
+
+function QtyInput({ value, onChange, className, wide }: { value: number; onChange: (v: number) => void; className?: string; wide?: boolean }) {
   const [display, setDisplay] = useState(String(value));
-  useEffect(() => { setDisplay(String(value)); }, [value]);
+  const [preview, setPreview] = useState<number | null>(null);
+  const isExpr = /[+\-*xX×]/.test(display);
+
+  useEffect(() => { setDisplay(String(value)); setPreview(null); }, [value]);
+
+  const handleChange = (raw: string) => {
+    setDisplay(raw);
+    // Check if it's a math expression
+    if (/[+\-*xX×]/.test(raw)) {
+      const result = calcExpr(raw);
+      setPreview(result);
+    } else {
+      setPreview(null);
+      const num = parseInt(raw);
+      if (!isNaN(num) && num >= 0) onChange(num);
+    }
+  };
+
+  const commit = () => {
+    if (isExpr) {
+      const result = calcExpr(display);
+      if (result !== null) {
+        onChange(result);
+        setDisplay(String(result));
+        setPreview(null);
+        return;
+      }
+    }
+    if (display === "" || isNaN(parseInt(display))) {
+      setDisplay("0");
+      onChange(0);
+    }
+    setPreview(null);
+  };
+
+  const defaultCls = wide
+    ? "w-24 h-7 text-center border border-border rounded text-xs font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+    : "w-14 h-7 text-center border border-border rounded text-xs font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
+
   return (
-    <input
-      type="number"
-      value={display}
-      onChange={(e) => {
-        setDisplay(e.target.value);
-        const num = parseInt(e.target.value);
-        if (!isNaN(num) && num >= 0) onChange(num);
-      }}
-      onFocus={(e) => {
-        if (display === "0") setDisplay("");
-        e.target.select();
-      }}
-      onBlur={() => {
-        if (display === "" || isNaN(parseInt(display))) {
-          setDisplay("0");
-          onChange(0);
-        }
-      }}
-      className={className || "w-12 h-7 text-center border border-border rounded text-xs font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"}
-      min="0"
-    />
+    <div className="relative inline-flex flex-col items-center">
+      <input
+        type="text"
+        inputMode="numeric"
+        value={display}
+        onChange={(e) => handleChange(e.target.value)}
+        onFocus={(e) => {
+          if (display === "0") setDisplay("");
+          e.target.select();
+        }}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); (e.target as HTMLInputElement).blur(); } }}
+        className={className || defaultCls}
+      />
+      {isExpr && preview !== null && (
+        <span className="absolute -bottom-3.5 text-[9px] font-semibold text-primary bg-primary-pale px-1 rounded">={preview}</span>
+      )}
+    </div>
   );
 }
 
@@ -572,6 +622,7 @@ function InputPageContent() {
 
         {allProducts.length > 0 && (
         <div className="mb-4 bg-white rounded-lg shadow-md overflow-hidden">
+          <p className="text-[10px] text-text-secondary px-2 py-1 bg-gray-50 border-b border-border">💡 Qty bisa pakai rumus: 10+5, 400-100, 10x10+5</p>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
@@ -592,7 +643,7 @@ function InputPageContent() {
                     <td className="px-2 py-1.5 text-text-secondary whitespace-nowrap">{product.sku}</td>
                     <td className="px-2 py-1.5 text-text-secondary whitespace-nowrap">{product.batch}</td>
                     <td className="px-1 py-1 text-center">
-                      <QtyInput value={quantities[product.sku] || 0} onChange={(v) => handleQuantityChange(product.sku, v)} />
+                      <QtyInput wide value={quantities[product.sku] || 0} onChange={(v) => handleQuantityChange(product.sku, v)} />
                     </td>
                     <td className="px-1 py-1 text-center">
                       <button onClick={() => handleDeleteProduct(product.sku)} className="w-5 h-5 rounded-full bg-red-100 text-red-600 hover:bg-red-500 hover:text-white text-[10px] font-bold transition" title="Hapus">✕</button>
@@ -612,7 +663,7 @@ function InputPageContent() {
                     <td className="px-2 py-1.5 text-text-secondary whitespace-nowrap">{product.sku}</td>
                     <td className="px-2 py-1.5 text-text-secondary whitespace-nowrap">{product.batch}</td>
                     <td className="px-1 py-1 text-center">
-                      <QtyInput value={quantities[product.sku] || 0} onChange={(v) => handleQuantityChange(product.sku, v)} />
+                      <QtyInput wide value={quantities[product.sku] || 0} onChange={(v) => handleQuantityChange(product.sku, v)} />
                     </td>
                     <td className="px-1 py-1 text-center">
                       <button onClick={() => handleDeleteNewProduct(product.sku)} className="w-5 h-5 rounded-full bg-red-100 text-red-600 hover:bg-red-500 hover:text-white text-[10px] font-bold transition" title="Hapus">✕</button>
