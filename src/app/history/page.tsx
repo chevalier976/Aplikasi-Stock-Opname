@@ -247,10 +247,10 @@ export default function HistoryPage() {
                       <tbody className="divide-y divide-border">
                         {entries.map((entry) => (
                           <tr key={entry.rowId} className="hover:bg-gray-50">
-                            <td className="px-2 py-1 text-text-primary max-w-[120px]">
-                              <span className="block truncate font-medium" title={entry.productName}>{entry.productName}</span>
+                            <td className="px-2 py-1 text-text-primary">
+                              <span className="break-words font-medium text-[11px] leading-tight">{entry.productName}</span>
                               {entry.edited === "Yes" && (
-                                <span className="text-[10px] text-orange-500" title={`Diedit: ${entry.editTimestamp}`}>✏️</span>
+                                <span className="ml-0.5 text-[10px] text-orange-500" title={`Diedit: ${entry.editTimestamp}`}>✏️</span>
                               )}
                             </td>
                             <td className="px-2 py-1 text-text-secondary whitespace-nowrap">{entry.sku}</td>

@@ -586,17 +586,13 @@ function InputPageContent() {
               <tbody className="divide-y divide-border">
                 {products.map((product) => (
                   <tr key={`${product.sku}-${product.batch}`} className="hover:bg-gray-50">
-                    <td className="px-2 py-1.5 text-text-primary font-medium max-w-[140px]">
-                      <span className="block truncate" title={product.productName}>{product.productName}</span>
+                    <td className="px-2 py-1.5 text-text-primary font-medium">
+                      <span className="break-words text-[11px] leading-tight">{product.productName}</span>
                     </td>
                     <td className="px-2 py-1.5 text-text-secondary whitespace-nowrap">{product.sku}</td>
                     <td className="px-2 py-1.5 text-text-secondary whitespace-nowrap">{product.batch}</td>
                     <td className="px-1 py-1 text-center">
-                      <div className="flex items-center justify-center gap-0.5">
-                        <button onClick={() => handleQuantityChange(product.sku, Math.max(0, (quantities[product.sku] || 0) - 1))} className="w-6 h-6 rounded bg-primary-pale text-primary text-xs font-bold hover:bg-primary-light hover:text-white transition">−</button>
-                        <QtyInput value={quantities[product.sku] || 0} onChange={(v) => handleQuantityChange(product.sku, v)} />
-                        <button onClick={() => handleQuantityChange(product.sku, (quantities[product.sku] || 0) + 1)} className="w-6 h-6 rounded bg-primary-pale text-primary text-xs font-bold hover:bg-primary-light hover:text-white transition">+</button>
-                      </div>
+                      <QtyInput value={quantities[product.sku] || 0} onChange={(v) => handleQuantityChange(product.sku, v)} />
                     </td>
                     <td className="px-1 py-1 text-center">
                       <button onClick={() => handleDeleteProduct(product.sku)} className="w-5 h-5 rounded-full bg-red-100 text-red-600 hover:bg-red-500 hover:text-white text-[10px] font-bold transition" title="Hapus">✕</button>
@@ -610,17 +606,13 @@ function InputPageContent() {
                 )}
                 {newProducts.map((product) => (
                   <tr key={`new-${product.sku}-${product.batch}`} className="hover:bg-gray-50 bg-blue-50/30">
-                    <td className="px-2 py-1.5 text-text-primary font-medium max-w-[140px]">
-                      <span className="block truncate" title={product.productName}>{product.productName}</span>
+                    <td className="px-2 py-1.5 text-text-primary font-medium">
+                      <span className="break-words text-[11px] leading-tight">{product.productName}</span>
                     </td>
                     <td className="px-2 py-1.5 text-text-secondary whitespace-nowrap">{product.sku}</td>
                     <td className="px-2 py-1.5 text-text-secondary whitespace-nowrap">{product.batch}</td>
                     <td className="px-1 py-1 text-center">
-                      <div className="flex items-center justify-center gap-0.5">
-                        <button onClick={() => handleQuantityChange(product.sku, Math.max(0, (quantities[product.sku] || 0) - 1))} className="w-6 h-6 rounded bg-primary-pale text-primary text-xs font-bold hover:bg-primary-light hover:text-white transition">−</button>
-                        <QtyInput value={quantities[product.sku] || 0} onChange={(v) => handleQuantityChange(product.sku, v)} />
-                        <button onClick={() => handleQuantityChange(product.sku, (quantities[product.sku] || 0) + 1)} className="w-6 h-6 rounded bg-primary-pale text-primary text-xs font-bold hover:bg-primary-light hover:text-white transition">+</button>
-                      </div>
+                      <QtyInput value={quantities[product.sku] || 0} onChange={(v) => handleQuantityChange(product.sku, v)} />
                     </td>
                     <td className="px-1 py-1 text-center">
                       <button onClick={() => handleDeleteNewProduct(product.sku)} className="w-5 h-5 rounded-full bg-red-100 text-red-600 hover:bg-red-500 hover:text-white text-[10px] font-bold transition" title="Hapus">✕</button>
