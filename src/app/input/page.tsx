@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import BottomNav from "@/components/BottomNav";
@@ -32,11 +32,15 @@ function QtyInput({ value, onChange, className, wide, onExprCommit }: { value: n
   const [preview, setPreview] = useState<number | null>(null);
   const [focused, setFocused] = useState(false);
   const inputRef = useState<HTMLInputElement | null>(null);
+  // Track whether an expression was already committed (to prevent blur from clearing formula)
+  const exprCommittedRef = useRef(false);
   const isExpr = /[+\-*xX×]/.test(display);
 
   useEffect(() => { setDisplay(String(value)); setPreview(null); }, [value]);
 
   const handleChange = (raw: string) => {
+    // User is actively typing — reset the committed flag
+    exprCommittedRef.current = false;
     setDisplay(raw);
     if (/[+\-*xX×]/.test(raw)) {
       const result = calcExpr(raw);
@@ -49,6 +53,8 @@ function QtyInput({ value, onChange, className, wide, onExprCommit }: { value: n
   };
 
   const insertOp = (op: string) => {
+    // User is inserting operator — reset the committed flag
+    exprCommittedRef.current = false;
     const next = display === "0" ? "" : display;
     // Don't add operator if last char is already an operator
     if (/[+\-*xX×]$/.test(next)) {
@@ -61,11 +67,17 @@ function QtyInput({ value, onChange, className, wide, onExprCommit }: { value: n
   };
 
   const commit = () => {
+    // If expression was already committed (e.g. via = button), don't process again on blur
+    if (exprCommittedRef.current) {
+      setFocused(false);
+      return;
+    }
     if (isExpr) {
       const result = calcExpr(display);
       if (result !== null) {
         // Save the expression before committing
         if (onExprCommit) onExprCommit(display + "=" + result);
+        exprCommittedRef.current = true;
         onChange(result);
         setDisplay(String(result));
         setPreview(null);
