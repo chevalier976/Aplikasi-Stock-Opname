@@ -18,6 +18,7 @@ export default function HistoryPage() {
   const [filter, setFilter] = useState("all");
   const [selectedEntry, setSelectedEntry] = useState<HistoryEntry | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [showFormula, setShowFormula] = useState<string | null>(null);
 
   useEffect(() => {
     fetchHistory();
@@ -255,7 +256,22 @@ export default function HistoryPage() {
                             </td>
                             <td className="px-2 py-1 text-text-secondary whitespace-nowrap">{entry.sku}</td>
                             <td className="px-2 py-1 text-text-secondary whitespace-nowrap">{entry.batch}</td>
-                            <td className="px-2 py-1 text-center font-semibold text-primary">{entry.qty}</td>
+                            <td className="px-2 py-1 text-center font-semibold text-primary relative">
+                              <button
+                                type="button"
+                                onClick={() => entry.formula ? setShowFormula(showFormula === entry.rowId ? null : entry.rowId) : null}
+                                className={entry.formula ? "underline decoration-dotted cursor-pointer" : ""}
+                              >
+                                {entry.qty}
+                                {entry.formula && <span className="ml-0.5 text-[9px] text-text-secondary no-underline">🧮</span>}
+                              </button>
+                              {showFormula === entry.rowId && entry.formula && (
+                                <div className="absolute z-10 bottom-full left-1/2 -translate-x-1/2 mb-1 bg-gray-800 text-white text-[10px] px-2 py-1 rounded shadow-lg whitespace-nowrap">
+                                  {entry.formula}
+                                  <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
+                                </div>
+                              )}
+                            </td>
                             <td className="px-1 py-1 text-center whitespace-nowrap">
                               <div className="flex items-center justify-center gap-0.5">
                                 <button

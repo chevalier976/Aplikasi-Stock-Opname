@@ -27,7 +27,7 @@ function calcExpr(expr: string): number | null {
   } catch { return null; }
 }
 
-function QtyInput({ value, onChange, className, wide }: { value: number; onChange: (v: number) => void; className?: string; wide?: boolean }) {
+function QtyInput({ value, onChange, className, wide, onExprCommit }: { value: number; onChange: (v: number) => void; className?: string; wide?: boolean; onExprCommit?: (expr: string) => void }) {
   const [display, setDisplay] = useState(String(value));
   const [preview, setPreview] = useState<number | null>(null);
   const [focused, setFocused] = useState(false);
@@ -64,6 +64,8 @@ function QtyInput({ value, onChange, className, wide }: { value: number; onChang
     if (isExpr) {
       const result = calcExpr(display);
       if (result !== null) {
+        // Save the expression before committing
+        if (onExprCommit) onExprCommit(display + "=" + result);
         onChange(result);
         setDisplay(String(result));
         setPreview(null);
@@ -74,6 +76,10 @@ function QtyInput({ value, onChange, className, wide }: { value: number; onChang
     if (display === "" || isNaN(parseInt(display))) {
       setDisplay("0");
       onChange(0);
+      if (onExprCommit) onExprCommit("");
+    } else {
+      // Plain number — clear formula
+      if (onExprCommit) onExprCommit("");
     }
     setPreview(null);
     setFocused(false);
@@ -131,6 +137,7 @@ function InputPageContent() {
   const [products, setProducts] = useState<Product[]>([]);
   const [newProducts, setNewProducts] = useState<Product[]>([]);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [formulas, setFormulas] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -208,6 +215,13 @@ function InputPageContent() {
     setQuantities((prev) => ({
       ...prev,
       [sku]: qty,
+    }));
+  };
+
+  const handleExprCommit = (sku: string, expr: string) => {
+    setFormulas((prev) => ({
+      ...prev,
+      [sku]: expr,
     }));
   };
 
@@ -391,6 +405,7 @@ function InputPageContent() {
         batch: product.batch,
         barcode: product.barcode || "",
         qty: quantities[product.sku],
+        formula: formulas[product.sku] || "",
         isNew: false,
       }));
 
@@ -402,6 +417,7 @@ function InputPageContent() {
         batch: product.batch,
         barcode: product.barcode || "",
         qty: quantities[product.sku],
+        formula: formulas[product.sku] || "",
         isNew: true,
       }));
 
@@ -675,7 +691,7 @@ function InputPageContent() {
                     <td className="px-2 py-1.5 text-text-secondary whitespace-nowrap">{product.sku}</td>
                     <td className="px-2 py-1.5 text-text-secondary whitespace-nowrap">{product.batch}</td>
                     <td className="px-1 py-1 text-center">
-                      <QtyInput wide value={quantities[product.sku] || 0} onChange={(v) => handleQuantityChange(product.sku, v)} />
+                      <QtyInput wide value={quantities[product.sku] || 0} onChange={(v) => handleQuantityChange(product.sku, v)} onExprCommit={(expr) => handleExprCommit(product.sku, expr)} />
                     </td>
                     <td className="px-1 py-1 text-center">
                       <button onClick={() => handleDeleteProduct(product.sku)} className="w-5 h-5 rounded-full bg-red-100 text-red-600 hover:bg-red-500 hover:text-white text-[10px] font-bold transition" title="Hapus">✕</button>
@@ -695,7 +711,7 @@ function InputPageContent() {
                     <td className="px-2 py-1.5 text-text-secondary whitespace-nowrap">{product.sku}</td>
                     <td className="px-2 py-1.5 text-text-secondary whitespace-nowrap">{product.batch}</td>
                     <td className="px-1 py-1 text-center">
-                      <QtyInput wide value={quantities[product.sku] || 0} onChange={(v) => handleQuantityChange(product.sku, v)} />
+                      <QtyInput wide value={quantities[product.sku] || 0} onChange={(v) => handleQuantityChange(product.sku, v)} onExprCommit={(expr) => handleExprCommit(product.sku, expr)} />
                     </td>
                     <td className="px-1 py-1 text-center">
                       <button onClick={() => handleDeleteNewProduct(product.sku)} className="w-5 h-5 rounded-full bg-red-100 text-red-600 hover:bg-red-500 hover:text-white text-[10px] font-bold transition" title="Hapus">✕</button>

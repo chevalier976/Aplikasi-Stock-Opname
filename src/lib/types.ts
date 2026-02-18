@@ -23,4 +23,5 @@ export type HistoryEntry = {
   qty: number;
   edited: string;
   editTimestamp: string;
+  formula: string;
 };

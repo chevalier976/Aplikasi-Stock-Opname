@@ -96,6 +96,7 @@ export const saveStockOpnameApi = async (
     qty: number;
     isNew?: boolean;
     barcode?: string;
+    formula?: string;
   }>
 ): Promise<{ success: boolean; message?: string }> => {
   return apiCall("saveStockOpname", {

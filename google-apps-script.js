@@ -251,7 +251,7 @@ function getHistory(operator, filter) {
       sessionId: data[i][0], rowId: data[i][1], timestamp: data[i][2],
       operator: data[i][3], location: data[i][4], productName: data[i][5],
       sku: data[i][6], batch: data[i][7], qty: data[i][8],
-      edited: data[i][9], editTimestamp: data[i][10]
+      edited: data[i][9], editTimestamp: data[i][10], formula: data[i][11] || ""
     });
   }
   var resp = { success: true, history: history };
@@ -346,10 +346,10 @@ function saveStockOpname(data) {
 
     var rows = data.items.map(function(item) {
       return [sessionId, generateShortId("R-", 6), timestamp, operatorName, loc,
-              item.productName, item.sku, item.batch, item.qty, "No", ""];
+              item.productName, item.sku, item.batch, item.qty, "No", "", item.formula || ""];
     });
 
-    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, 11).setValues(rows);
+    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, 12).setValues(rows);
     syncMasterDataInternal(loc, data.items);
     bumpCacheVersion();
     return { success: true, message: "Stock opname berhasil disimpan" };
