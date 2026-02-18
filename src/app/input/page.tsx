@@ -30,13 +30,14 @@ function calcExpr(expr: string): number | null {
 function QtyInput({ value, onChange, className, wide }: { value: number; onChange: (v: number) => void; className?: string; wide?: boolean }) {
   const [display, setDisplay] = useState(String(value));
   const [preview, setPreview] = useState<number | null>(null);
+  const [focused, setFocused] = useState(false);
+  const inputRef = useState<HTMLInputElement | null>(null);
   const isExpr = /[+\-*xX×]/.test(display);
 
   useEffect(() => { setDisplay(String(value)); setPreview(null); }, [value]);
 
   const handleChange = (raw: string) => {
     setDisplay(raw);
-    // Check if it's a math expression
     if (/[+\-*xX×]/.test(raw)) {
       const result = calcExpr(raw);
       setPreview(result);
@@ -47,6 +48,18 @@ function QtyInput({ value, onChange, className, wide }: { value: number; onChang
     }
   };
 
+  const insertOp = (op: string) => {
+    const next = display === "0" ? "" : display;
+    // Don't add operator if last char is already an operator
+    if (/[+\-*xX×]$/.test(next)) {
+      const replaced = next.slice(0, -1) + op;
+      handleChange(replaced);
+    } else {
+      handleChange(next + op);
+    }
+    inputRef[0]?.focus();
+  };
+
   const commit = () => {
     if (isExpr) {
       const result = calcExpr(display);
@@ -54,6 +67,7 @@ function QtyInput({ value, onChange, className, wide }: { value: number; onChang
         onChange(result);
         setDisplay(String(result));
         setPreview(null);
+        setFocused(false);
         return;
       }
     }
@@ -62,29 +76,47 @@ function QtyInput({ value, onChange, className, wide }: { value: number; onChang
       onChange(0);
     }
     setPreview(null);
+    setFocused(false);
   };
 
   const defaultCls = wide
-    ? "w-24 h-7 text-center border border-border rounded text-xs font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+    ? "w-full h-8 text-center border border-border rounded text-sm font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
     : "w-14 h-7 text-center border border-border rounded text-xs font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
 
+  const opBtnCls = "w-8 h-7 rounded bg-gray-100 text-text-primary text-sm font-bold active:bg-primary active:text-white transition select-none";
+
   return (
-    <div className="relative inline-flex flex-col items-center">
-      <input
-        type="text"
-        inputMode="numeric"
-        value={display}
-        onChange={(e) => handleChange(e.target.value)}
-        onFocus={(e) => {
-          if (display === "0") setDisplay("");
-          e.target.select();
-        }}
-        onBlur={commit}
-        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); (e.target as HTMLInputElement).blur(); } }}
-        className={className || defaultCls}
-      />
+    <div className="relative inline-flex flex-col items-center gap-0.5">
+      <div className="flex items-center gap-0.5">
+        <input
+          ref={(el) => { inputRef[0] = el; }}
+          type="text"
+          inputMode="numeric"
+          value={display}
+          onChange={(e) => handleChange(e.target.value)}
+          onFocus={(e) => {
+            if (display === "0") setDisplay("");
+            setFocused(true);
+            e.target.select();
+          }}
+          onBlur={() => { setTimeout(commit, 150); }}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); (e.target as HTMLInputElement).blur(); } }}
+          className={className || defaultCls}
+        />
+        {wide && focused && (
+          <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={commit}
+            className="h-7 px-2 rounded bg-primary text-white text-[10px] font-semibold whitespace-nowrap active:bg-primary-light transition select-none">=</button>
+        )}
+      </div>
+      {wide && focused && (
+        <div className="flex gap-0.5">
+          <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => insertOp("+")} className={opBtnCls}>+</button>
+          <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => insertOp("-")} className={opBtnCls}>−</button>
+          <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => insertOp("x")} className={opBtnCls}>×</button>
+        </div>
+      )}
       {isExpr && preview !== null && (
-        <span className="absolute -bottom-3.5 text-[9px] font-semibold text-primary bg-primary-pale px-1 rounded">={preview}</span>
+        <span className="text-[9px] font-semibold text-primary bg-primary-pale px-1 rounded">={preview}</span>
       )}
     </div>
   );
