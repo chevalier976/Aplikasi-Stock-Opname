@@ -141,6 +141,7 @@ export default function HistoryPage() {
           productName: data.productName,
           sku: data.sku,
           batch: data.batch,
+          formula: data.formula,
         }
       );
 
@@ -231,7 +232,10 @@ export default function HistoryPage() {
           entry.rowId,
           entry.sessionId,
           batchQty[entry.rowId],
-          editTimestamp
+          editTimestamp,
+          {
+            formula: batchFormulas[entry.rowId] || "",
+          }
         );
         if (!result.success) {
           hasError = true;

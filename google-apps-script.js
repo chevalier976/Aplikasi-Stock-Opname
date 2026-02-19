@@ -399,6 +399,7 @@ function updateEntry(data) {
         row[8] = data.newQty;
         row[9] = "Yes";
         row[10] = formatTimestamp(data.editTimestamp);
+        if (data.formula !== undefined) row[11] = data.formula || "";
         sheet.getRange(i + 1, 1, 1, row.length).setValues([row]);
         bumpCacheVersion();
         return { success: true, message: "Entry berhasil diupdate" };

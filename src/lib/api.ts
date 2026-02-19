@@ -120,7 +120,7 @@ export const updateEntryApi = async (
   sessionId: string,
   newQty: number,
   editTimestamp: string,
-  extra?: { productName?: string; sku?: string; batch?: string }
+  extra?: { productName?: string; sku?: string; batch?: string; formula?: string }
 ): Promise<{ success: boolean; message?: string }> => {
   return apiCall("updateEntry", {
     rowId,
