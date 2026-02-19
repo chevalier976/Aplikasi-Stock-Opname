@@ -21,6 +21,10 @@ export default function HistoryPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showFormula, setShowFormula] = useState<string | null>(null);
 
+  // Inline batch edit state
+  const [editingBatch, setEditingBatch] = useState<string | null>(null);
+  const [editingBatchValue, setEditingBatchValue] = useState("");
+
   // Batch edit state
   const [batchEditSession, setBatchEditSession] = useState<string | null>(null);
   const [batchQty, setBatchQty] = useState<Record<string, number>>({});
@@ -155,6 +159,51 @@ export default function HistoryPage() {
       setHistory(prev);
       setCache(ck, prev);
       toast.error("Gagal mengupdate, data dikembalikan");
+    }
+  };
+
+  // ── Inline batch edit handler ──
+
+  const startInlineBatchEdit = (entry: HistoryEntry) => {
+    setEditingBatch(entry.rowId);
+    setEditingBatchValue(entry.batch);
+  };
+
+  const saveInlineBatch = async (entry: HistoryEntry) => {
+    const newBatch = editingBatchValue.trim();
+    setEditingBatch(null);
+    if (newBatch === entry.batch) return; // no change
+
+    const editTimestamp = new Date().toISOString();
+    const prev = [...history];
+
+    // Optimistic update
+    const updated = history.map((e) =>
+      e.rowId === entry.rowId ? { ...e, batch: newBatch, edited: "Yes", editTimestamp } : e
+    );
+    setHistory(updated);
+    toast.success("Batch berhasil diupdate");
+
+    const ck = `history:${user?.email}:${filter}`;
+    setCache(ck, updated);
+
+    try {
+      const result = await updateEntryApi(
+        entry.rowId,
+        entry.sessionId,
+        entry.qty,
+        editTimestamp,
+        { batch: newBatch }
+      );
+      if (!result.success) {
+        setHistory(prev);
+        setCache(ck, prev);
+        toast.error(result.message || "Gagal update batch");
+      }
+    } catch {
+      setHistory(prev);
+      setCache(ck, prev);
+      toast.error("Gagal update batch");
     }
   };
 
@@ -405,7 +454,36 @@ export default function HistoryPage() {
                               )}
                             </td>
                             <td className="px-2 py-1 text-text-secondary whitespace-nowrap">{entry.sku}</td>
-                            <td className="px-2 py-1 text-text-secondary whitespace-nowrap">{entry.batch}</td>
+                            <td className="px-2 py-1 text-text-secondary whitespace-nowrap">
+                              {editingBatch === entry.rowId ? (
+                                <input
+                                  type="text"
+                                  value={editingBatchValue}
+                                  onChange={(e) => setEditingBatchValue(e.target.value)}
+                                  onBlur={() => saveInlineBatch(entry)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") { e.preventDefault(); saveInlineBatch(entry); }
+                                    if (e.key === "Escape") { setEditingBatch(null); }
+                                  }}
+                                  autoFocus
+                                  className="w-20 px-1 py-0.5 border border-primary rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                                />
+                              ) : (
+                                <span className="inline-flex items-center gap-0.5">
+                                  {entry.batch}
+                                  {!isBatchEditing && (
+                                    <button
+                                      type="button"
+                                      onClick={() => startInlineBatchEdit(entry)}
+                                      className="text-[10px] text-text-secondary hover:text-primary transition opacity-60 hover:opacity-100"
+                                      title="Edit batch"
+                                    >
+                                      ✏️
+                                    </button>
+                                  )}
+                                </span>
+                              )}
+                            </td>
                             <td className="px-2 py-1 text-center font-semibold text-primary relative">
                               {isBatchEditing ? (
                                 <QtyInput
