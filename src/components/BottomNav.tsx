@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { useAuth } from "./AuthProvider";
 
 interface BottomNavProps {
@@ -9,6 +11,13 @@ interface BottomNavProps {
 
 export default function BottomNav({ activePage }: BottomNavProps) {
   const { logout } = useAuth();
+  const router = useRouter();
+
+  // Prefetch all routes on mount for instant tab switching
+  useEffect(() => {
+    router.prefetch("/scan");
+    router.prefetch("/history");
+  }, [router]);
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-border shadow-lg">

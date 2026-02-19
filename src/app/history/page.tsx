@@ -6,7 +6,7 @@ import BottomNav from "@/components/BottomNav";
 import EditModal, { EditData } from "@/components/EditModal";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import QtyInput from "@/components/QtyInput";
-import { getHistoryApi, updateEntryApi, deleteEntryApi } from "@/lib/api";
+import { getHistoryApi, updateEntryApi, deleteEntryApi, warmupCacheApi } from "@/lib/api";
 import { HistoryEntry } from "@/lib/types";
 import { getCache, setCache, clearCache } from "@/lib/cache";
 import toast from "react-hot-toast";
@@ -30,6 +30,8 @@ export default function HistoryPage() {
 
   useEffect(() => {
     fetchHistory();
+    // Warmup server cache for faster scan/input tab switch
+    warmupCacheApi().catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter, user]);
 

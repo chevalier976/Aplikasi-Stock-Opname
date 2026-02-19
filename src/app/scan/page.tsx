@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import BarcodeScanner from "@/components/BarcodeScanner";
 import BottomNav from "@/components/BottomNav";
-import { getProductsApi, searchLocationsApi, warmupCacheApi } from "@/lib/api";
+import { getProductsApi, searchLocationsApi, warmupCacheApi, preloadHistory, preloadProducts } from "@/lib/api";
+import { setCache } from "@/lib/cache";
 import toast from "react-hot-toast";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import BrandBLP from "@/components/BrandBLP";
@@ -35,10 +36,10 @@ export default function ScanPage() {
   useEffect(() => {
     if (warmedRef.current) return;
     warmedRef.current = true;
-    warmupCacheApi().catch(() => {
-      // best-effort warmup, no need to block UI
-    });
-  }, []);
+    // Warmup server cache + preload history data for instant tab switch
+    warmupCacheApi().catch(() => {});
+    if (user?.email) preloadHistory(user.email);
+  }, [user]);
 
   const handleScan = async (code: string) => {
     if (isSearching) return;
@@ -63,6 +64,8 @@ export default function ScanPage() {
     try {
       const result = await getProductsApi(code);
       if (result.success && result.products && result.products.length > 0) {
+        // Pre-cache products so input page renders INSTANTLY
+        setCache(`products:${code}`, result.products);
         toast.success("Lokasi ditemukan!");
         router.push(`/input?location=${encodeURIComponent(code)}`);
       } else {
@@ -115,13 +118,15 @@ export default function ScanPage() {
       } finally {
         setSearchLoading(false);
       }
-    }, 180);
+    }, 100);
   };
 
   const handleSelectLocation = (loc: LocationResult) => {
     setLocationCode(loc.locationCode);
     setShowResults(false);
     setLocationResults([]);
+    // Pre-warm product data in background
+    preloadProducts(loc.locationCode);
     searchLocation(loc.locationCode);
   };
 

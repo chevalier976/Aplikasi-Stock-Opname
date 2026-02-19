@@ -8,7 +8,7 @@ import LoadingSpinner from "@/components/LoadingSpinner";
 import BarcodeScanner from "@/components/BarcodeScanner";
 import QtyInput from "@/components/QtyInput";
 import { calcExpr } from "@/components/QtyInput";
-import { getProductsApi, saveStockOpnameApi, deleteProductApi, lookupBarcodeApi, searchProductsApi, warmupCacheApi } from "@/lib/api";
+import { getProductsApi, saveStockOpnameApi, deleteProductApi, lookupBarcodeApi, searchProductsApi, warmupCacheApi, preloadHistory } from "@/lib/api";
 import { Product } from "@/lib/types";
 import { getCache, setCache, clearCache } from "@/lib/cache";
 import toast from "react-hot-toast";
@@ -44,7 +44,9 @@ function InputPageContent() {
     warmupCacheApi().catch(() => {
       // best effort warmup
     });
-  }, []);
+    // Preload history for instant tab switch
+    if (user?.email) preloadHistory(user.email);
+  }, [user]);
 
   useEffect(() => {
     if (!location) {
@@ -187,7 +189,7 @@ function InputPageContent() {
       } catch (error) {
         console.error("Search error:", error);
       }
-    }, 180);
+    }, 100);
     
     setSearchTimer(timer);
   };

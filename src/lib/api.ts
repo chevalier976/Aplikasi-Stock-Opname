@@ -8,14 +8,63 @@ const activeControllers: Record<string, AbortController> = {};
 // In-flight dedup: prevent identical concurrent requests
 const inflightRequests: Record<string, Promise<any> | undefined> = {};
 
+// ─── In-memory response cache (fast, no serialization) ──────────────
+interface MemEntry { data: any; ts: number }
+const memCache = new Map<string, MemEntry>();
+
+// TTL per action (ms) — only read-like actions are cached
+const CACHE_TTL: Record<string, number> = {
+  searchLocations: 60_000,   // 1 min
+  searchProducts:  60_000,
+  lookupBarcode:  120_000,   // 2 min
+  getProducts:     30_000,   // 30 s
+  getHistory:      15_000,   // 15 s
+  warmupCache:    300_000,   // 5 min
+};
+
+function getMemCache(key: string, ttl: number): any | null {
+  const entry = memCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > ttl) { memCache.delete(key); return null; }
+  return entry.data;
+}
+
+function setMemCache(key: string, data: any): void {
+  memCache.set(key, { data, ts: Date.now() });
+  // Prune old entries when map grows large
+  if (memCache.size > 200) {
+    const now = Date.now();
+    for (const [k, v] of memCache) {
+      if (now - v.ts > 300_000) memCache.delete(k);
+    }
+  }
+}
+
+/** Invalidate in-memory cache entries by action prefix */
+export function invalidateMemCache(prefix?: string): void {
+  if (!prefix) { memCache.clear(); return; }
+  for (const k of memCache.keys()) {
+    if (k.startsWith(prefix + ":")) memCache.delete(k);
+  }
+}
+
 export const apiCall = async (
   action: string,
   data: Record<string, unknown> = {},
-  options?: { cancelPrevious?: boolean }
+  options?: { cancelPrevious?: boolean; skipMemCache?: boolean }
 ): Promise<any> => {
   if (!API_URL) {
     console.error("NEXT_PUBLIC_APPS_SCRIPT_URL is not configured. Please set it in your .env.local file.");
     throw new Error("API URL belum dikonfigurasi. Silakan set NEXT_PUBLIC_APPS_SCRIPT_URL di file .env.local");
+  }
+
+  const dedupKey = action + ":" + JSON.stringify(data);
+  const ttl = CACHE_TTL[action];
+
+  // Return cached result instantly for read-like actions
+  if (ttl && !options?.skipMemCache) {
+    const cached = getMemCache(dedupKey, ttl);
+    if (cached) return cached;
   }
 
   // Cancel previous request of same action type if requested
@@ -26,7 +75,6 @@ export const apiCall = async (
   }
 
   // Dedup: if same action is already in-flight, return same promise
-  const dedupKey = action + ":" + JSON.stringify(data);
   if (inflightRequests[dedupKey]) {
     return inflightRequests[dedupKey];
   }
@@ -52,6 +100,12 @@ export const apiCall = async (
       }
 
       const result = await response.json();
+
+      // Store successful results in memory cache
+      if (ttl && result?.success !== false) {
+        setMemCache(dedupKey, result);
+      }
+
       return result;
     } catch (error: any) {
       if (error?.name === "AbortError") {
@@ -99,6 +153,8 @@ export const saveStockOpnameApi = async (
     formula?: string;
   }>
 ): Promise<{ success: boolean; message?: string }> => {
+  invalidateMemCache("getHistory");
+  invalidateMemCache("getProducts");
   return apiCall("saveStockOpname", {
     sessionId,
     operator,
@@ -122,6 +178,7 @@ export const updateEntryApi = async (
   editTimestamp: string,
   extra?: { productName?: string; sku?: string; batch?: string; formula?: string }
 ): Promise<{ success: boolean; message?: string }> => {
+  invalidateMemCache("getHistory");
   return apiCall("updateEntry", {
     rowId,
     sessionId,
@@ -135,6 +192,8 @@ export const deleteProductApi = async (
   locationCode: string,
   sku: string
 ): Promise<{ success: boolean; message?: string }> => {
+  invalidateMemCache("getProducts");
+  invalidateMemCache("getHistory");
   return apiCall("deleteProduct", { locationCode, sku });
 };
 
@@ -153,6 +212,7 @@ export const searchProductsApi = async (
 export const deleteEntryApi = async (
   rowId: string
 ): Promise<{ success: boolean; message?: string }> => {
+  invalidateMemCache("getHistory");
   return apiCall("deleteEntry", { rowId });
 };
 
@@ -167,3 +227,25 @@ export const warmupCacheApi = async (
 ): Promise<{ success: boolean; warmed?: { locations: number; products: number }; message?: string }> => {
   return apiCall("warmupCache", payload);
 };
+
+// ─── Preload helpers: fire-and-forget data fetching for adjacent pages ───
+let preloadedPages: Record<string, boolean> = {};
+
+/** Preload history data so tab switch is instant */
+export function preloadHistory(operator: string, filter?: string): void {
+  const key = `preload:history:${operator}:${filter || "all"}`;
+  if (preloadedPages[key]) return;
+  preloadedPages[key] = true;
+  getHistoryApi(operator, filter).catch(() => {});
+  // Reset flag after TTL so it can be preloaded again
+  setTimeout(() => { delete preloadedPages[key]; }, 15_000);
+}
+
+/** Preload products for a location so input page is instant */
+export function preloadProducts(locationCode: string): void {
+  const key = `preload:products:${locationCode}`;
+  if (preloadedPages[key]) return;
+  preloadedPages[key] = true;
+  getProductsApi(locationCode).catch(() => {});
+  setTimeout(() => { delete preloadedPages[key]; }, 30_000);
+}
