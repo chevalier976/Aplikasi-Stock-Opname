@@ -4,12 +4,14 @@ import { useState, useEffect } from "react";
 import { HistoryEntry, Product } from "@/lib/types";
 import { lookupBarcodeApi, searchProductsApi } from "@/lib/api";
 import BarcodeScanner from "./BarcodeScanner";
+import QtyInput from "./QtyInput";
 
 export interface EditData {
   newQty: number;
   productName: string;
   sku: string;
   batch: string;
+  formula?: string;
 }
 
 interface EditModalProps {
@@ -26,6 +28,7 @@ export default function EditModal({
   onSave,
 }: EditModalProps) {
   const [quantity, setQuantity] = useState(entry.qty);
+  const [formula, setFormula] = useState(entry.formula || "");
   const [productName, setProductName] = useState(entry.productName);
   const [sku, setSku] = useState(entry.sku);
   const [batch, setBatch] = useState(entry.batch);
@@ -38,6 +41,7 @@ export default function EditModal({
 
   useEffect(() => {
     setQuantity(entry.qty);
+    setFormula(entry.formula || "");
     setProductName(entry.productName);
     setSku(entry.sku);
     setBatch(entry.batch);
@@ -100,7 +104,7 @@ export default function EditModal({
 
   const handleSave = () => {
     if (quantity < 0) return;
-    onSave({ newQty: quantity, productName, sku, batch });
+    onSave({ newQty: quantity, productName, sku, batch, formula });
   };
 
   return (
@@ -242,13 +246,18 @@ export default function EditModal({
             <label className="block text-sm font-semibold text-text-primary mb-1">
               Quantity:
             </label>
-            <input
-              type="number"
+            <p className="text-[10px] text-text-secondary mb-1">💡 Bisa pakai rumus: ketik langsung atau klik tombol operator di bawah</p>
+            <p className="text-[10px] text-text-secondary mb-2">Contoh: 10x10+5 = 105 (perkalian dihitung duluan)</p>
+            <QtyInput
               value={quantity}
-              onChange={(e) => setQuantity(parseInt(e.target.value) || 0)}
-              className="w-full px-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-              min="0"
+              onChange={(v) => setQuantity(v)}
+              onExprCommit={(expr) => setFormula(expr)}
+              wide
+              className="w-full px-4 py-2.5 border-2 border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-center text-lg font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             />
+            {formula && (
+              <p className="text-xs text-primary mt-1.5 font-medium">🧮 Rumus: {formula}</p>
+            )}
           </div>
         </div>
 
