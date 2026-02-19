@@ -21,15 +21,12 @@ export default function HistoryPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showFormula, setShowFormula] = useState<string | null>(null);
 
-  // Inline batch edit state
+  // Inline edit state
   const [editingBatch, setEditingBatch] = useState<string | null>(null);
   const [editingBatchValue, setEditingBatchValue] = useState("");
-
-  // Batch edit state
-  const [batchEditSession, setBatchEditSession] = useState<string | null>(null);
-  const [batchQty, setBatchQty] = useState<Record<string, number>>({});
-  const [batchFormulas, setBatchFormulas] = useState<Record<string, string>>({});
-  const [batchSaving, setBatchSaving] = useState(false);
+  const [editingQty, setEditingQty] = useState<string | null>(null);
+  const [editingQtyValue, setEditingQtyValue] = useState(0);
+  const [editingQtyFormula, setEditingQtyFormula] = useState("");
 
   useEffect(() => {
     fetchHistory();
@@ -162,7 +159,7 @@ export default function HistoryPage() {
     }
   };
 
-  // ── Inline batch edit handler ──
+  // ── Inline edit handlers ──
 
   const startInlineBatchEdit = (entry: HistoryEntry) => {
     setEditingBatch(entry.rowId);
@@ -207,103 +204,51 @@ export default function HistoryPage() {
     }
   };
 
-  // ── Batch Edit handlers ──
-
-  const startBatchEdit = (sessionId: string, entries: HistoryEntry[]) => {
-    const qtyMap: Record<string, number> = {};
-    const formulaMap: Record<string, string> = {};
-    entries.forEach((e) => {
-      qtyMap[e.rowId] = e.qty;
-      formulaMap[e.rowId] = e.formula || "";
-    });
-    setBatchQty(qtyMap);
-    setBatchFormulas(formulaMap);
-    setBatchEditSession(sessionId);
+  const startInlineQtyEdit = (entry: HistoryEntry) => {
+    setEditingQty(entry.rowId);
+    setEditingQtyValue(entry.qty);
+    setEditingQtyFormula(entry.formula || "");
   };
 
-  const cancelBatchEdit = () => {
-    setBatchEditSession(null);
-    setBatchQty({});
-    setBatchFormulas({});
-  };
+  const saveInlineQty = async (entry: HistoryEntry) => {
+    const newQty = editingQtyValue;
+    const newFormula = editingQtyFormula;
+    setEditingQty(null);
+    if (newQty === entry.qty && newFormula === (entry.formula || "")) return; // no change
 
-  const handleBatchQtyChange = (rowId: string, qty: number) => {
-    setBatchQty((prev) => ({ ...prev, [rowId]: qty }));
-  };
-
-  const handleBatchExprCommit = (rowId: string, expr: string) => {
-    setBatchFormulas((prev) => ({ ...prev, [rowId]: expr }));
-  };
-
-  const saveBatchEdit = async () => {
-    if (!batchEditSession) return;
-
-    // Find entries that changed
-    const sessionEntries = history.filter((e) => e.sessionId === batchEditSession);
-    const changedEntries = sessionEntries.filter(
-      (e) => batchQty[e.rowId] !== undefined && batchQty[e.rowId] !== e.qty
-    );
-
-    if (changedEntries.length === 0) {
-      toast("Tidak ada perubahan qty", { icon: "ℹ️" });
-      cancelBatchEdit();
-      return;
-    }
-
-    setBatchSaving(true);
     const editTimestamp = new Date().toISOString();
     const prev = [...history];
 
-    // Optimistic: update UI immediately
-    const updated = history.map((e) => {
-      if (e.sessionId === batchEditSession && batchQty[e.rowId] !== undefined) {
-        return {
-          ...e,
-          qty: batchQty[e.rowId],
-          formula: batchFormulas[e.rowId] || e.formula,
-          edited: batchQty[e.rowId] !== e.qty ? "Yes" : e.edited,
-          editTimestamp: batchQty[e.rowId] !== e.qty ? editTimestamp : e.editTimestamp,
-        };
-      }
-      return e;
-    });
+    // Optimistic update
+    const updated = history.map((e) =>
+      e.rowId === entry.rowId
+        ? { ...e, qty: newQty, formula: newFormula, edited: "Yes", editTimestamp }
+        : e
+    );
     setHistory(updated);
+    toast.success("Qty berhasil diupdate");
 
     const ck = `history:${user?.email}:${filter}`;
     setCache(ck, updated);
-    toast.success(`${changedEntries.length} entry berhasil diupdate`);
 
-    // Background sync: send all changes to server
-    let hasError = false;
-    for (const entry of changedEntries) {
-      try {
-        const result = await updateEntryApi(
-          entry.rowId,
-          entry.sessionId,
-          batchQty[entry.rowId],
-          editTimestamp,
-          {
-            formula: batchFormulas[entry.rowId] || "",
-          }
-        );
-        if (!result.success) {
-          hasError = true;
-          console.error(`Failed to update ${entry.rowId}:`, result.message);
-        }
-      } catch (error) {
-        hasError = true;
-        console.error(`Error updating ${entry.rowId}:`, error);
+    try {
+      const result = await updateEntryApi(
+        entry.rowId,
+        entry.sessionId,
+        newQty,
+        editTimestamp,
+        { formula: newFormula }
+      );
+      if (!result.success) {
+        setHistory(prev);
+        setCache(ck, prev);
+        toast.error(result.message || "Gagal update qty");
       }
-    }
-
-    if (hasError) {
+    } catch {
       setHistory(prev);
       setCache(ck, prev);
-      toast.error("Sebagian update gagal, data dikembalikan");
+      toast.error("Gagal update qty");
     }
-
-    setBatchSaving(false);
-    cancelBatchEdit();
   };
 
   const groupBySession = (entries: HistoryEntry[]) => {
@@ -375,61 +320,21 @@ export default function HistoryPage() {
           <div className="space-y-4">
             {Object.entries(groupedHistory).map(([sessionId, entries]) => {
               const firstEntry = entries[0];
-              const isBatchEditing = batchEditSession === sessionId;
-              const batchTotalItems = isBatchEditing
-                ? Object.values(batchQty).reduce((sum, q) => sum + q, 0)
-                : entries.reduce((sum, e) => sum + e.qty, 0);
+              const totalItems = entries.reduce((sum, e) => sum + e.qty, 0);
 
               return (
                 <div
                   key={sessionId}
-                  className={`bg-white rounded-lg shadow-md overflow-hidden ${isBatchEditing ? "ring-2 ring-primary" : ""}`}
+                  className="bg-white rounded-lg shadow-md overflow-hidden"
                 >
-                  <div className="bg-primary-pale px-3 py-2 border-b border-border flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="font-semibold text-text-primary text-xs">
-                        {firstEntry.location} • {formatDate(firstEntry.timestamp)}
-                      </p>
-                      <p className="text-[10px] text-text-secondary truncate">
-                        {sessionId} • {entries.length} produk • {batchTotalItems} item
-                      </p>
-                    </div>
-                    <div className="flex-shrink-0">
-                      {!isBatchEditing ? (
-                        <button
-                          onClick={() => startBatchEdit(sessionId, entries)}
-                          disabled={batchEditSession !== null && !isBatchEditing}
-                          className="px-2 py-1 bg-primary text-white text-[10px] rounded font-semibold hover:bg-primary-light transition disabled:opacity-40 whitespace-nowrap"
-                          title="Edit semua qty sekaligus"
-                        >
-                          ✏️ Batch Edit
-                        </button>
-                      ) : (
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={saveBatchEdit}
-                            disabled={batchSaving}
-                            className="px-2 py-1 bg-green-600 text-white text-[10px] rounded font-semibold hover:bg-green-700 transition disabled:opacity-50 whitespace-nowrap"
-                          >
-                            {batchSaving ? "..." : "💾 Simpan"}
-                          </button>
-                          <button
-                            onClick={cancelBatchEdit}
-                            disabled={batchSaving}
-                            className="px-2 py-1 bg-gray-400 text-white text-[10px] rounded font-semibold hover:bg-gray-500 transition disabled:opacity-50"
-                          >
-                            Batal
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                  <div className="bg-primary-pale px-3 py-2 border-b border-border">
+                    <p className="font-semibold text-text-primary text-xs">
+                      {firstEntry.location} • {formatDate(firstEntry.timestamp)}
+                    </p>
+                    <p className="text-[10px] text-text-secondary truncate">
+                      {sessionId} • {entries.length} produk • {totalItems} item
+                    </p>
                   </div>
-
-                  {isBatchEditing && (
-                    <div className="bg-blue-50 px-3 py-1 border-b border-border">
-                      <p className="text-[10px] text-primary">💡 Qty bisa pakai rumus: 10+5, 400-100, 10x10+5 — Klik &quot;Simpan&quot; untuk menyimpan</p>
-                    </div>
-                  )}
 
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
@@ -439,17 +344,15 @@ export default function HistoryPage() {
                           <th className="text-left px-2 py-1 font-semibold text-text-secondary whitespace-nowrap">SKU</th>
                           <th className="text-left px-2 py-1 font-semibold text-text-secondary whitespace-nowrap">Batch</th>
                           <th className="text-center px-2 py-1 font-semibold text-text-secondary whitespace-nowrap">Qty</th>
-                          {!isBatchEditing && (
-                            <th className="text-center px-1 py-1 font-semibold text-text-secondary whitespace-nowrap">Aksi</th>
-                          )}
+                          <th className="text-center px-1 py-1 font-semibold text-text-secondary whitespace-nowrap">Aksi</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
                         {entries.map((entry) => (
-                          <tr key={entry.rowId} className={`hover:bg-gray-50 ${isBatchEditing && batchQty[entry.rowId] !== entry.qty ? "bg-yellow-50" : ""}`}>
+                          <tr key={entry.rowId} className="hover:bg-gray-50">
                             <td className="px-2 py-1 text-text-primary">
                               <span className="break-words font-medium text-[11px] leading-tight">{entry.productName}</span>
-                              {entry.edited === "Yes" && !isBatchEditing && (
+                              {entry.edited === "Yes" && (
                                 <span className="ml-0.5 text-[10px] text-orange-500" title={`Diedit: ${entry.editTimestamp}`}>✏️</span>
                               )}
                             </td>
@@ -471,29 +374,45 @@ export default function HistoryPage() {
                               ) : (
                                 <span className="inline-flex items-center gap-0.5">
                                   {entry.batch}
-                                  {!isBatchEditing && (
-                                    <button
-                                      type="button"
-                                      onClick={() => startInlineBatchEdit(entry)}
-                                      className="text-[10px] text-text-secondary hover:text-primary transition opacity-60 hover:opacity-100"
-                                      title="Edit batch"
-                                    >
-                                      ✏️
-                                    </button>
-                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => startInlineBatchEdit(entry)}
+                                    className="text-[10px] text-text-secondary hover:text-primary transition opacity-60 hover:opacity-100"
+                                    title="Edit batch"
+                                  >
+                                    ✏️
+                                  </button>
                                 </span>
                               )}
                             </td>
                             <td className="px-2 py-1 text-center font-semibold text-primary relative">
-                              {isBatchEditing ? (
-                                <QtyInput
-                                  wide
-                                  value={batchQty[entry.rowId] ?? entry.qty}
-                                  onChange={(v) => handleBatchQtyChange(entry.rowId, v)}
-                                  onExprCommit={(expr) => handleBatchExprCommit(entry.rowId, expr)}
-                                />
+                              {editingQty === entry.rowId ? (
+                                <div className="flex flex-col items-center">
+                                  <QtyInput
+                                    wide
+                                    value={editingQtyValue}
+                                    onChange={(v) => setEditingQtyValue(v)}
+                                    onExprCommit={(expr) => setEditingQtyFormula(expr)}
+                                  />
+                                  <div className="flex gap-1 mt-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => saveInlineQty(entry)}
+                                      className="px-2 py-0.5 bg-green-600 text-white text-[10px] rounded font-semibold hover:bg-green-700 transition"
+                                    >
+                                      💾
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingQty(null)}
+                                      className="px-2 py-0.5 bg-gray-300 text-text-primary text-[10px] rounded font-semibold hover:bg-gray-400 transition"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                </div>
                               ) : (
-                                <>
+                                <span className="inline-flex items-center justify-center gap-0.5">
                                   <button
                                     type="button"
                                     onClick={() => entry.formula ? setShowFormula(showFormula === entry.rowId ? null : entry.rowId) : null}
@@ -502,66 +421,44 @@ export default function HistoryPage() {
                                     {entry.qty}
                                     {entry.formula && <span className="ml-0.5 text-[9px] text-text-secondary no-underline">🧮</span>}
                                   </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => startInlineQtyEdit(entry)}
+                                    className="text-[10px] text-text-secondary hover:text-primary transition opacity-60 hover:opacity-100"
+                                    title="Edit qty"
+                                  >
+                                    ✏️
+                                  </button>
                                   {showFormula === entry.rowId && entry.formula && (
                                     <div className="absolute z-10 bottom-full left-1/2 -translate-x-1/2 mb-1 bg-gray-800 text-white text-[10px] px-2 py-1 rounded shadow-lg whitespace-nowrap">
                                       {entry.formula}
                                       <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
                                     </div>
                                   )}
-                                </>
+                                </span>
                               )}
                             </td>
-                            {!isBatchEditing && (
-                              <td className="px-1 py-1 text-center whitespace-nowrap">
-                                <div className="flex items-center justify-center gap-0.5">
-                                  <button
-                                    onClick={() => handleEdit(entry)}
-                                    className="px-1.5 py-0.5 bg-primary text-white text-[10px] rounded hover:bg-primary-light transition"
-                                  >
-                                    Edit
-                                  </button>
-                                  <button
-                                    onClick={() => handleDelete(entry)}
-                                    className="px-1.5 py-0.5 bg-red-500 text-white text-[10px] rounded hover:bg-red-600 transition"
-                                  >
-                                    Hapus
-                                  </button>
-                                </div>
-                              </td>
-                            )}
+                            <td className="px-1 py-1 text-center whitespace-nowrap">
+                              <div className="flex items-center justify-center gap-0.5">
+                                <button
+                                  onClick={() => handleEdit(entry)}
+                                  className="px-1.5 py-0.5 bg-primary text-white text-[10px] rounded hover:bg-primary-light transition"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(entry)}
+                                  className="px-1.5 py-0.5 bg-red-500 text-white text-[10px] rounded hover:bg-red-600 transition"
+                                >
+                                  Hapus
+                                </button>
+                              </div>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-
-                  {/* Batch edit footer */}
-                  {isBatchEditing && (
-                    <div className="bg-gray-50 px-3 py-2 border-t border-border flex items-center justify-between">
-                      <p className="text-[10px] text-text-secondary">
-                        {Object.entries(batchQty).filter(([rowId]) => {
-                          const original = entries.find((e) => e.rowId === rowId);
-                          return original && batchQty[rowId] !== original.qty;
-                        }).length} perubahan
-                      </p>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={cancelBatchEdit}
-                          disabled={batchSaving}
-                          className="px-3 py-1.5 bg-gray-200 text-text-primary text-xs rounded-lg font-semibold hover:bg-gray-300 transition disabled:opacity-50"
-                        >
-                          Batal
-                        </button>
-                        <button
-                          onClick={saveBatchEdit}
-                          disabled={batchSaving}
-                          className="px-3 py-1.5 bg-primary text-white text-xs rounded-lg font-semibold hover:bg-primary-light transition disabled:opacity-50"
-                        >
-                          {batchSaving ? "Menyimpan..." : "💾 Simpan Semua"}
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </div>
               );
             })}
