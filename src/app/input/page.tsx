@@ -39,6 +39,7 @@ function InputPageContent() {
   const [searchResults, setSearchResults] = useState<Product[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [searchTimer, setSearchTimer] = useState<NodeJS.Timeout | null>(null);
+  const [newProductFormula, setNewProductFormula] = useState("");
 
   useEffect(() => {
     warmupCacheApi().catch(() => {
@@ -271,6 +272,9 @@ function InputPageContent() {
       ...prev,
       [newProduct.sku]: newProductForm.qty,
     }));
+    if (newProductFormula) {
+      setFormulas((prev) => ({ ...prev, [newProduct.sku]: newProductFormula }));
+    }
 
     // Reset form
     setNewProductForm({
@@ -280,6 +284,7 @@ function InputPageContent() {
       barcode: "",
       qty: 0,
     });
+    setNewProductFormula("");
     setShowAddForm(false);
     toast.success("Produk baru berhasil ditambahkan");
   };
@@ -320,18 +325,26 @@ function InputPageContent() {
     const sessionId = `${user?.email}_${Date.now()}`;
     const timestamp = new Date().toISOString();
 
-    // Fire save in background (AppSheet-style optimistic)
-    saveStockOpnameApi(sessionId, user?.email || "", location, timestamp, items)
-      .then((result) => {
-        if (!result.success) toast.error(result.message || "Gagal sinkron ke server");
-      })
-      .catch(() => toast.error("Gagal sinkron ke server"));
-
-    // Navigate immediately — don't wait for server
+    // Navigate FIRST — then fire save (fastest perceived speed)
     clearCache("history:");
     clearCache("products:");
     toast.success("Stock opname berhasil disimpan!");
-    router.push("/scan");
+    router.replace("/scan");
+
+    // Fire save in background (AppSheet-style optimistic)
+    // Use requestIdleCallback or setTimeout to avoid blocking navigation
+    const doSave = () => {
+      saveStockOpnameApi(sessionId, user?.email || "", location, timestamp, items)
+        .then((result) => {
+          if (!result.success) toast.error(result.message || "Gagal sinkron ke server");
+        })
+        .catch(() => toast.error("Gagal sinkron ke server"));
+    };
+    if (typeof requestIdleCallback !== "undefined") {
+      requestIdleCallback(doSave);
+    } else {
+      setTimeout(doSave, 0);
+    }
   };
 
   if (loading) {
@@ -522,8 +535,9 @@ function InputPageContent() {
                 </label>
                 <QtyInput
                   value={newProductForm.qty}
-                  onChange={(v) => setNewProductForm({ ...newProductForm, qty: v })}
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  onChange={(v) => setNewProductForm((prev) => ({ ...prev, qty: v }))}
+                  onExprCommit={(expr) => setNewProductFormula(expr)}
+                  wide
                 />
               </div>
               <button

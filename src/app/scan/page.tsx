@@ -39,7 +39,9 @@ export default function ScanPage() {
     // Warmup server cache + preload history data for instant tab switch
     warmupCacheApi().catch(() => {});
     if (user?.email) preloadHistory(user.email);
-  }, [user]);
+    // Prefetch input route for instant navigation
+    router.prefetch("/input");
+  }, [user, router]);
 
   const handleScan = async (code: string) => {
     if (isSearching) return;
