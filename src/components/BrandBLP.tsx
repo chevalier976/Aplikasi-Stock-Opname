@@ -9,7 +9,7 @@ export default function BrandBLP({ className = "", compact = false }: BrandBLPPr
       <span className="font-black tracking-[0.16em] leading-none">BLP</span>
       {!compact && (
         <span className="text-[0.48em] font-semibold tracking-[0.22em] opacity-85 leading-none">
-          STOCK
+          STOCK OPNAME
         </span>
       )}
     </div>
