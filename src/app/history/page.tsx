@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import BottomNav from "@/components/BottomNav";
 import EditModal, { EditData } from "@/components/EditModal";
@@ -16,10 +16,16 @@ export default function HistoryPage() {
   const { user } = useAuth();
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("all");
   const [selectedEntry, setSelectedEntry] = useState<HistoryEntry | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showFormula, setShowFormula] = useState<string | null>(null);
+
+  // ── Search & Filter state ──
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterDate, setFilterDate] = useState("");   // "YYYY-MM-DD"
+  const [filterMonth, setFilterMonth] = useState("");  // "YYYY-MM"
+  const [showFilters, setShowFilters] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   // Inline edit state
   const [editingBatch, setEditingBatch] = useState<string | null>(null);
@@ -30,29 +36,25 @@ export default function HistoryPage() {
 
   useEffect(() => {
     fetchHistory();
-    // Warmup server cache for faster scan/input tab switch
     warmupCacheApi().catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter, user]);
+  }, [user]);
 
   const fetchHistory = async () => {
     if (!user) return;
 
-    const ck = `history:${user.email}:${filter}`;
+    const ck = `history:${user.email}:all`;
 
-    // AppSheet-style: show cached data INSTANTLY
+    // Show cached data instantly
     const cached = getCache<HistoryEntry[]>(ck);
     if (cached) {
       setHistory(cached.data);
-      setLoading(false); // UI langsung tampil!
+      setLoading(false);
     }
 
-    // Background refresh (stale-while-revalidate)
+    // Background refresh
     try {
-      const result = await getHistoryApi(
-        user.email,
-        filter === "all" ? undefined : filter
-      );
+      const result = await getHistoryApi(user.email);
 
       if (result.success && result.history) {
         setHistory(result.history);
@@ -66,6 +68,67 @@ export default function HistoryPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // ── Parse a timestamp string to a Date object ──
+  const parseTimestamp = (raw: string): Date | null => {
+    try {
+      // ISO format: "2026-02-16T18:28:00Z"
+      if (/\d{4}-\d{2}-\d{2}T/.test(raw)) return new Date(raw);
+      // Format: "16 Feb 2026 18:28"
+      const m = raw.match(/(\d{1,2})\s+(\w+)\s+(\d{4})/);
+      if (m) {
+        const months: Record<string, number> = {
+          Jan:0,Feb:1,Mar:2,Apr:3,Mei:4,May:4,Jun:5,Jul:6,Agu:7,Aug:7,Sep:8,Okt:9,Oct:9,Nov:10,Des:11,Dec:11
+        };
+        return new Date(+m[3], months[m[2]] ?? 0, +m[1]);
+      }
+      return new Date(raw);
+    } catch { return null; }
+  };
+
+  // ── Client-side filtered data (instant) ──
+  const filteredHistory = useMemo(() => {
+    let result = history;
+
+    // Search by product name
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      result = result.filter((e) =>
+        e.productName.toLowerCase().includes(q) ||
+        e.sku.toLowerCase().includes(q)
+      );
+    }
+
+    // Filter by specific date
+    if (filterDate) {
+      result = result.filter((e) => {
+        const d = parseTimestamp(e.timestamp);
+        if (!d) return false;
+        const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        return iso === filterDate;
+      });
+    }
+
+    // Filter by month
+    if (filterMonth) {
+      result = result.filter((e) => {
+        const d = parseTimestamp(e.timestamp);
+        if (!d) return false;
+        const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        return ym === filterMonth;
+      });
+    }
+
+    return result;
+  }, [history, searchQuery, filterDate, filterMonth]);
+
+  const hasActiveFilters = searchQuery || filterDate || filterMonth;
+
+  const clearAllFilters = () => {
+    setSearchQuery("");
+    setFilterDate("");
+    setFilterMonth("");
   };
 
   const handleEdit = (entry: HistoryEntry) => {
@@ -85,7 +148,7 @@ export default function HistoryPage() {
     setHistory(updated);
     toast.success("Entry berhasil dihapus");
 
-    const ck = `history:${user?.email}:${filter}`;
+    const ck = `history:${user?.email}:all`;
     setCache(ck, updated);
     clearCache("products:"); // invalidate product cache
 
@@ -130,7 +193,7 @@ export default function HistoryPage() {
     setIsModalOpen(false);
     toast.success("Berhasil mengupdate entry");
 
-    const ck = `history:${user?.email}:${filter}`;
+    const ck = `history:${user?.email}:all`;
     setCache(ck, updated);
 
     // Background sync ke server
@@ -183,7 +246,7 @@ export default function HistoryPage() {
     setHistory(updated);
     toast.success("Batch berhasil diupdate");
 
-    const ck = `history:${user?.email}:${filter}`;
+    const ck = `history:${user?.email}:all`;
     setCache(ck, updated);
 
     try {
@@ -230,7 +293,7 @@ export default function HistoryPage() {
     setHistory(updated);
     toast.success("Qty berhasil diupdate");
 
-    const ck = `history:${user?.email}:${filter}`;
+    const ck = `history:${user?.email}:all`;
     setCache(ck, updated);
 
     try {
@@ -287,7 +350,7 @@ export default function HistoryPage() {
     );
   }
 
-  const groupedHistory = groupBySession(history);
+  const groupedHistory = groupBySession(filteredHistory);
 
   return (
     <div className="min-h-screen pb-20">
@@ -298,25 +361,107 @@ export default function HistoryPage() {
       </div>
 
       <div className="p-4">
-        <div className="mb-4">
-          <label className="block text-sm font-semibold text-text-primary mb-2">
-            Filter:
-          </label>
-          <select
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            className="w-full px-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-          >
-            <option value="all">Semua</option>
-            <option value="today">Hari Ini</option>
-            <option value="week">Minggu Ini</option>
-            <option value="month">Bulan Ini</option>
-          </select>
+        {/* ── Search Box ── */}
+        <div className="mb-3">
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary">🔍</span>
+            <input
+              ref={searchRef}
+              type="text"
+              placeholder="Cari nama produk atau SKU..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-8 py-2.5 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => { setSearchQuery(""); searchRef.current?.focus(); }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary text-lg leading-none"
+              >
+                ×
+              </button>
+            )}
+          </div>
         </div>
 
-        {history.length === 0 ? (
+        {/* ── Filter Toggle ── */}
+        <div className="mb-3 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition ${
+              showFilters || filterDate || filterMonth
+                ? "bg-primary text-white border-primary"
+                : "bg-white text-text-primary border-border hover:border-primary"
+            }`}
+          >
+            <span>📅</span> Filter Tanggal
+            {(filterDate || filterMonth) && (
+              <span className="bg-white text-primary text-[10px] font-bold w-4 h-4 rounded-full inline-flex items-center justify-center">
+                {(filterDate ? 1 : 0) + (filterMonth ? 1 : 0)}
+              </span>
+            )}
+          </button>
+
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              className="text-xs text-red-500 hover:text-red-700 font-medium transition"
+            >
+              Reset Filter
+            </button>
+          )}
+
+          {/* Result count */}
+          <span className="ml-auto text-[11px] text-text-secondary">
+            {filteredHistory.length} / {history.length} entry
+          </span>
+        </div>
+
+        {/* ── Date & Month Filters (collapsible) ── */}
+        {showFilters && (
+          <div className="mb-4 bg-white border border-border rounded-lg p-3 space-y-3 shadow-sm">
+            <div>
+              <label className="block text-xs font-semibold text-text-secondary mb-1">
+                Filter Tanggal:
+              </label>
+              <input
+                type="date"
+                value={filterDate}
+                onChange={(e) => { setFilterDate(e.target.value); if (e.target.value) setFilterMonth(""); }}
+                className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-text-secondary mb-1">
+                Filter Bulan:
+              </label>
+              <input
+                type="month"
+                value={filterMonth}
+                onChange={(e) => { setFilterMonth(e.target.value); if (e.target.value) setFilterDate(""); }}
+                className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+          </div>
+        )}
+
+        {filteredHistory.length === 0 ? (
           <div className="bg-white rounded-lg p-8 text-center">
-            <p className="text-text-secondary">Belum ada riwayat</p>
+            <p className="text-text-secondary">
+              {hasActiveFilters ? "Tidak ada hasil yang cocok" : "Belum ada riwayat"}
+            </p>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                className="mt-2 text-sm text-primary font-medium hover:underline"
+              >
+                Reset Filter
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-4">
