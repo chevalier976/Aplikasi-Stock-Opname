@@ -389,110 +389,114 @@ export default function HistoryPage() {
           </div>
         ) : (
           <div className="bg-white rounded-lg shadow-md overflow-hidden">
-            {/* ── Header row ── */}
-            <div className="bg-primary text-white text-[11px] font-semibold flex items-center px-3 py-2">
-              <span className="flex-1">Nama Produk</span>
-              <span className="w-20 text-right mr-2">Qty Fisik</span>
-              <span className="w-[88px] text-center">Aksi</span>
-            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-[640px] w-full text-xs">
+                <thead>
+                  <tr className="bg-primary text-white">
+                    <th className="text-left px-3 py-2.5 font-semibold whitespace-nowrap">Lokasi</th>
+                    <th className="text-left px-3 py-2.5 font-semibold whitespace-nowrap">Nama Produk</th>
+                    <th className="text-left px-3 py-2.5 font-semibold whitespace-nowrap">Batch</th>
+                    <th className="text-right px-3 py-2.5 font-semibold whitespace-nowrap">Qty Fisik</th>
+                    <th className="text-center px-2 py-2.5 font-semibold whitespace-nowrap">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredHistory.map((entry, idx) => (
+                    <tr
+                      key={entry.rowId}
+                      className={`border-b border-border hover:bg-gray-50 transition ${idx % 2 === 1 ? "bg-gray-50/50" : "bg-white"}`}
+                    >
+                      {/* Lokasi */}
+                      <td className="px-3 py-2 text-text-secondary whitespace-nowrap text-[11px]">
+                        {entry.location}
+                      </td>
 
-            {/* ── Rows ── */}
-            <div className="divide-y divide-border">
-              {filteredHistory.map((entry, idx) => (
-                <div
-                  key={entry.rowId}
-                  className={`px-3 py-2 ${idx % 2 === 1 ? "bg-gray-50/60" : ""}`}
-                >
-                  {/* Row 1: Product Name ... Qty ... Edit/Hapus */}
-                  <div className="flex items-start gap-2">
-                    {/* Product name — single line, truncate */}
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-[12px] text-text-primary truncate leading-tight">
-                        {entry.productName}
+                      {/* Nama Produk */}
+                      <td className="px-3 py-2 text-text-primary whitespace-nowrap">
+                        <span className="font-medium text-[11px]">{entry.productName}</span>
                         {entry.edited === "Yes" && (
-                          <span className="ml-0.5 text-[10px] text-orange-500">✏️</span>
+                          <span className="ml-0.5 text-[10px] text-orange-500" title={`Diedit: ${entry.editTimestamp}`}>✏️</span>
                         )}
-                      </p>
-                    </div>
+                      </td>
 
-                    {/* Qty */}
-                    <div className="w-20 text-right shrink-0">
-                      {editingQty === entry.rowId ? (
-                        <div className="flex flex-col items-end">
-                          <QtyInput
-                            wide
-                            value={editingQtyValue}
-                            onChange={(v) => setEditingQtyValue(v)}
-                            onExprCommit={(expr) => setEditingQtyFormula(expr)}
+                      {/* Batch — inline editable */}
+                      <td className="px-3 py-2 text-text-secondary whitespace-nowrap">
+                        {editingBatch === entry.rowId ? (
+                          <input
+                            type="text"
+                            value={editingBatchValue}
+                            onChange={(e) => setEditingBatchValue(e.target.value)}
+                            onBlur={() => saveInlineBatch(entry)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") { e.preventDefault(); saveInlineBatch(entry); }
+                              if (e.key === "Escape") { setEditingBatch(null); }
+                            }}
+                            autoFocus
+                            className="w-24 px-1.5 py-0.5 border border-primary rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary"
                           />
-                          <div className="flex gap-1 mt-1">
-                            <button type="button" onClick={() => saveInlineQty(entry)}
-                              className="px-2 py-0.5 bg-green-600 text-white text-[10px] rounded font-semibold">💾</button>
-                            <button type="button" onClick={() => setEditingQty(null)}
-                              className="px-2 py-0.5 bg-gray-300 text-text-primary text-[10px] rounded font-semibold">✕</button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div>
-                          <span className="font-bold text-[13px] text-primary">
-                            <span
-                              className={entry.formula ? "cursor-pointer underline decoration-dotted" : ""}
-                              onClick={() => { if (entry.formula) setShowFormula(showFormula === entry.rowId ? null : entry.rowId); }}
-                            >
-                              {entry.qty.toLocaleString()}
-                            </span>
-                            {entry.formula && <span className="ml-0.5 text-[9px] text-text-secondary">🧮</span>}
-                            <button type="button" onClick={() => startInlineQtyEdit(entry)}
-                              className="ml-1 text-[10px] text-text-secondary hover:text-primary" title="Edit qty">✏️</button>
+                        ) : (
+                          <span
+                            className="inline-flex items-center gap-1 cursor-pointer group"
+                            onClick={() => startInlineBatchEdit(entry)}
+                          >
+                            {entry.batch}
+                            <span className="text-[10px] text-text-secondary opacity-0 group-hover:opacity-100 transition">✏️</span>
                           </span>
-                          {showFormula === entry.rowId && entry.formula && (
-                            <div className="mt-0.5 bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded shadow-lg whitespace-nowrap inline-block">
-                              {entry.formula}
+                        )}
+                      </td>
+
+                      {/* Qty Fisik */}
+                      <td className="px-3 py-2 text-right font-semibold text-primary whitespace-nowrap">
+                        {editingQty === entry.rowId ? (
+                          <div className="flex flex-col items-end">
+                            <QtyInput
+                              wide
+                              value={editingQtyValue}
+                              onChange={(v) => setEditingQtyValue(v)}
+                              onExprCommit={(expr) => setEditingQtyFormula(expr)}
+                            />
+                            <div className="flex gap-1 mt-1">
+                              <button type="button" onClick={() => saveInlineQty(entry)}
+                                className="px-2 py-0.5 bg-green-600 text-white text-[10px] rounded font-semibold hover:bg-green-700 transition">💾</button>
+                              <button type="button" onClick={() => setEditingQty(null)}
+                                className="px-2 py-0.5 bg-gray-300 text-text-primary text-[10px] rounded font-semibold hover:bg-gray-400 transition">✕</button>
                             </div>
-                          )}
+                          </div>
+                        ) : (
+                          <div>
+                            <span className="inline-flex items-center justify-end gap-1">
+                              <span
+                                className={entry.formula ? "cursor-pointer underline decoration-dotted" : ""}
+                                onClick={() => { if (entry.formula) setShowFormula(showFormula === entry.rowId ? null : entry.rowId); }}
+                              >
+                                {entry.qty.toLocaleString()}
+                              </span>
+                              {entry.formula && <span className="text-[9px] text-text-secondary">🧮</span>}
+                              <button type="button" onClick={() => startInlineQtyEdit(entry)}
+                                className="text-[10px] text-text-secondary hover:text-primary transition" title="Edit qty">✏️</button>
+                            </span>
+                            {showFormula === entry.rowId && entry.formula && (
+                              <div className="mt-0.5 bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded shadow-lg whitespace-nowrap">
+                                {entry.formula}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Aksi */}
+                      <td className="px-2 py-2 text-center whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1">
+                          <button onClick={() => handleEdit(entry)}
+                            className="px-2 py-1 bg-primary text-white text-[10px] rounded font-medium hover:bg-primary-light transition">Edit</button>
+                          <button onClick={() => handleDelete(entry)}
+                            className="px-2 py-1 bg-red-500 text-white text-[10px] rounded font-medium hover:bg-red-600 transition">Hapus</button>
                         </div>
-                      )}
-                    </div>
-
-                    {/* Aksi */}
-                    <div className="w-[88px] flex items-center justify-center gap-1 shrink-0">
-                      <button onClick={() => handleEdit(entry)}
-                        className="px-2 py-1 bg-primary text-white text-[10px] rounded font-medium hover:bg-primary-light transition">Edit</button>
-                      <button onClick={() => handleDelete(entry)}
-                        className="px-2 py-1 bg-red-500 text-white text-[10px] rounded font-medium hover:bg-red-600 transition">Hapus</button>
-                    </div>
-                  </div>
-
-                  {/* Row 2: Location • Batch (compact subtitle) */}
-                  <div className="flex items-center gap-1 mt-0.5">
-                    <span className="text-[10px] text-text-secondary truncate">
-                      📍 {entry.location}
-                    </span>
-                    <span className="text-[10px] text-text-secondary">•</span>
-                    {editingBatch === entry.rowId ? (
-                      <input
-                        type="text"
-                        value={editingBatchValue}
-                        onChange={(e) => setEditingBatchValue(e.target.value)}
-                        onBlur={() => saveInlineBatch(entry)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") { e.preventDefault(); saveInlineBatch(entry); }
-                          if (e.key === "Escape") { setEditingBatch(null); }
-                        }}
-                        autoFocus
-                        className="w-24 px-1 py-0 border border-primary rounded text-[10px] focus:outline-none focus:ring-1 focus:ring-primary"
-                      />
-                    ) : (
-                      <span
-                        className="text-[10px] text-text-secondary cursor-pointer hover:text-primary transition inline-flex items-center gap-0.5"
-                        onClick={() => startInlineBatchEdit(entry)}
-                      >
-                        🏷️ {entry.batch} <span className="text-[9px] opacity-60">✏️</span>
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
