@@ -40,6 +40,9 @@ function InputPageContent() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [searchTimer, setSearchTimer] = useState<NodeJS.Timeout | null>(null);
   const [newProductFormula, setNewProductFormula] = useState("");
+  // Inline batch editing
+  const [editingBatchKey, setEditingBatchKey] = useState<string | null>(null);
+  const [editingBatchValue, setEditingBatchValue] = useState("");
   // All products cached locally for instant client-side search
   const allProductsRef = useRef<Product[] | null>(null);
 
@@ -316,6 +319,23 @@ function InputPageContent() {
     setNewProductFormula("");
     setShowAddForm(false);
     toast.success("Produk baru berhasil ditambahkan");
+  };
+
+  const handleBatchEdit = (key: string, currentBatch: string) => {
+    setEditingBatchKey(key);
+    setEditingBatchValue(currentBatch);
+  };
+
+  const handleBatchSave = (sku: string, isNew: boolean) => {
+    const newBatch = editingBatchValue.trim();
+    if (isNew) {
+      setNewProducts((prev) => prev.map((p) => p.sku === sku ? { ...p, batch: newBatch } : p));
+    } else {
+      setProducts((prev) => prev.map((p) => p.sku === sku ? { ...p, batch: newBatch } : p));
+    }
+    setEditingBatchKey(null);
+    setEditingBatchValue("");
+    toast.success("Batch diperbarui");
   };
 
   const handleSave = () => {
@@ -612,7 +632,27 @@ function InputPageContent() {
                       <span className="break-words text-[11px] leading-tight">{product.productName}</span>
                     </td>
                     <td className="px-2 py-1.5 text-text-secondary whitespace-nowrap">{product.sku}</td>
-                    <td className="px-2 py-1.5 text-text-secondary whitespace-nowrap">{product.batch}</td>
+                    <td className="px-2 py-1.5 text-text-secondary whitespace-nowrap">
+                      {editingBatchKey === `existing-${product.sku}` ? (
+                        <span className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            value={editingBatchValue}
+                            onChange={(e) => setEditingBatchValue(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleBatchSave(product.sku, false); if (e.key === 'Escape') setEditingBatchKey(null); }}
+                            className="w-16 px-1 py-0.5 border border-primary rounded text-xs"
+                            autoFocus
+                          />
+                          <button onClick={() => handleBatchSave(product.sku, false)} className="text-green-600 hover:text-green-800 text-xs" title="Simpan">✓</button>
+                          <button onClick={() => setEditingBatchKey(null)} className="text-red-500 hover:text-red-700 text-xs" title="Batal">✕</button>
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1">
+                          <span>{product.batch}</span>
+                          <button onClick={() => handleBatchEdit(`existing-${product.sku}`, product.batch)} className="text-gray-400 hover:text-primary text-[10px]" title="Edit Batch">✏️</button>
+                        </span>
+                      )}
+                    </td>
                     <td className="px-1 py-1 text-center">
                       <QtyInput wide value={quantities[product.sku] || 0} onChange={(v) => handleQuantityChange(product.sku, v)} onExprCommit={(expr) => handleExprCommit(product.sku, expr)} />
                     </td>
@@ -632,7 +672,27 @@ function InputPageContent() {
                       <span className="break-words text-[11px] leading-tight">{product.productName}</span>
                     </td>
                     <td className="px-2 py-1.5 text-text-secondary whitespace-nowrap">{product.sku}</td>
-                    <td className="px-2 py-1.5 text-text-secondary whitespace-nowrap">{product.batch}</td>
+                    <td className="px-2 py-1.5 text-text-secondary whitespace-nowrap">
+                      {editingBatchKey === `new-${product.sku}` ? (
+                        <span className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            value={editingBatchValue}
+                            onChange={(e) => setEditingBatchValue(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleBatchSave(product.sku, true); if (e.key === 'Escape') setEditingBatchKey(null); }}
+                            className="w-16 px-1 py-0.5 border border-primary rounded text-xs"
+                            autoFocus
+                          />
+                          <button onClick={() => handleBatchSave(product.sku, true)} className="text-green-600 hover:text-green-800 text-xs" title="Simpan">✓</button>
+                          <button onClick={() => setEditingBatchKey(null)} className="text-red-500 hover:text-red-700 text-xs" title="Batal">✕</button>
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1">
+                          <span>{product.batch}</span>
+                          <button onClick={() => handleBatchEdit(`new-${product.sku}`, product.batch)} className="text-gray-400 hover:text-primary text-[10px]" title="Edit Batch">✏️</button>
+                        </span>
+                      )}
+                    </td>
                     <td className="px-1 py-1 text-center">
                       <QtyInput wide value={quantities[product.sku] || 0} onChange={(v) => handleQuantityChange(product.sku, v)} onExprCommit={(expr) => handleExprCommit(product.sku, expr)} />
                     </td>
