@@ -1,4 +1,4 @@
-const CACHE_NAME = 'stock-opname-v1';
+const CACHE_NAME = 'stock-opname-v2';
 
 // Assets to cache on install
 const PRECACHE_ASSETS = [
