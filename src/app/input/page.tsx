@@ -8,7 +8,7 @@ import LoadingSpinner from "@/components/LoadingSpinner";
 import BarcodeScanner from "@/components/BarcodeScanner";
 import QtyInput from "@/components/QtyInput";
 import { calcExpr } from "@/components/QtyInput";
-import { getProductsApi, saveStockOpnameApi, deleteProductApi, lookupBarcodeApi, searchProductsApi, warmupCacheApi, preloadHistory } from "@/lib/api";
+import { getProductsApi, saveStockOpnameApi, deleteProductApi, lookupBarcodeApi, searchProductsApi, warmupCacheApi, preloadHistory, getAllProductsApi } from "@/lib/api";
 import { Product } from "@/lib/types";
 import { getCache, setCache, clearCache } from "@/lib/cache";
 import toast from "react-hot-toast";
@@ -40,13 +40,30 @@ function InputPageContent() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [searchTimer, setSearchTimer] = useState<NodeJS.Timeout | null>(null);
   const [newProductFormula, setNewProductFormula] = useState("");
+  // All products cached locally for instant client-side search
+  const allProductsRef = useRef<Product[] | null>(null);
 
   useEffect(() => {
-    warmupCacheApi().catch(() => {
-      // best effort warmup
-    });
+    warmupCacheApi().catch(() => {});
     // Preload history for instant tab switch
     if (user?.email) preloadHistory(user.email);
+    // Load all products for instant client-side search
+    const loadAllProducts = async () => {
+      const cached = getCache<Product[]>("allProducts");
+      if (cached && cached.age < 120) {
+        allProductsRef.current = cached.data;
+      }
+      try {
+        const result = await getAllProductsApi();
+        if (result.success && result.products) {
+          allProductsRef.current = result.products;
+          setCache("allProducts", result.products);
+        }
+      } catch {
+        // Fall back to server-side search
+      }
+    };
+    loadAllProducts();
   }, [user]);
 
   useEffect(() => {
@@ -179,7 +196,19 @@ function InputPageContent() {
       setShowSuggestions(false);
       return;
     }
+
+    // CLIENT-SIDE filtering if we have all products (INSTANT — 0ms)
+    if (allProductsRef.current) {
+      const q = value.trim().toLowerCase();
+      const filtered = allProductsRef.current
+        .filter((p) => p.productName.toLowerCase().includes(q))
+        .slice(0, 10);
+      setSearchResults(filtered);
+      setShowSuggestions(filtered.length > 0);
+      return;
+    }
     
+    // Fallback: server-side search
     const timer = setTimeout(async () => {
       try {
         const result = await searchProductsApi(value.trim());
@@ -190,7 +219,7 @@ function InputPageContent() {
       } catch (error) {
         console.error("Search error:", error);
       }
-    }, 100);
+    }, 80);
     
     setSearchTimer(timer);
   };
@@ -325,26 +354,18 @@ function InputPageContent() {
     const sessionId = `${user?.email}_${Date.now()}`;
     const timestamp = new Date().toISOString();
 
-    // Navigate FIRST — then fire save (fastest perceived speed)
+    // Fire save IMMEDIATELY in background — don't await
+    saveStockOpnameApi(sessionId, user?.email || "", location, timestamp, items)
+      .then((result) => {
+        if (!result.success) toast.error(result.message || "Gagal sinkron ke server");
+      })
+      .catch(() => toast.error("Gagal sinkron ke server"));
+
+    // Navigate immediately — don't wait for server
     clearCache("history:");
     clearCache("products:");
     toast.success("Stock opname berhasil disimpan!");
-    router.replace("/scan");
-
-    // Fire save in background (AppSheet-style optimistic)
-    // Use requestIdleCallback or setTimeout to avoid blocking navigation
-    const doSave = () => {
-      saveStockOpnameApi(sessionId, user?.email || "", location, timestamp, items)
-        .then((result) => {
-          if (!result.success) toast.error(result.message || "Gagal sinkron ke server");
-        })
-        .catch(() => toast.error("Gagal sinkron ke server"));
-    };
-    if (typeof requestIdleCallback !== "undefined") {
-      requestIdleCallback(doSave);
-    } else {
-      setTimeout(doSave, 0);
-    }
+    router.push("/scan");
   };
 
   if (loading) {

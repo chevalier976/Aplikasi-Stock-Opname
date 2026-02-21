@@ -20,6 +20,8 @@ const CACHE_TTL: Record<string, number> = {
   getProducts:     30_000,   // 30 s
   getHistory:      15_000,   // 15 s
   warmupCache:    300_000,   // 5 min
+  getAllLocations: 120_000,  // 2 min — bulk data
+  getAllProducts:  120_000,  // 2 min — bulk data
 };
 
 function getMemCache(key: string, ttl: number): any | null {
@@ -249,3 +251,19 @@ export function preloadProducts(locationCode: string): void {
   getProductsApi(locationCode).catch(() => {});
   setTimeout(() => { delete preloadedPages[key]; }, 30_000);
 }
+
+// ─── Bulk data for client-side search (instant UX) ──────────────────
+
+export const getAllLocationsApi = async (): Promise<{
+  success: boolean;
+  locations?: Array<{ locationCode: string; productCount: number }>;
+}> => {
+  return apiCall("getAllLocations");
+};
+
+export const getAllProductsApi = async (): Promise<{
+  success: boolean;
+  products?: Product[];
+}> => {
+  return apiCall("getAllProducts");
+};

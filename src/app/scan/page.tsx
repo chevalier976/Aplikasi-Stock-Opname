@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import BarcodeScanner from "@/components/BarcodeScanner";
 import BottomNav from "@/components/BottomNav";
-import { getProductsApi, searchLocationsApi, warmupCacheApi, preloadHistory, preloadProducts } from "@/lib/api";
-import { setCache } from "@/lib/cache";
+import { getProductsApi, searchLocationsApi, warmupCacheApi, preloadHistory, preloadProducts, getAllLocationsApi } from "@/lib/api";
+import { getCache, setCache } from "@/lib/cache";
 import toast from "react-hot-toast";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import BrandBLP from "@/components/BrandBLP";
@@ -30,16 +30,36 @@ export default function ScanPage() {
   const [searchLocationApiDisabled, setSearchLocationApiDisabled] = useState(false);
   const searchTimerRef = useRef<NodeJS.Timeout | null>(null);
   const warmedRef = useRef(false);
+  // All locations cached locally for instant client-side filtering
+  const allLocationsRef = useRef<LocationResult[] | null>(null);
 
   const normalizeLocationCode = (value: string) => value.toUpperCase().replace(/\s+/g, "").trim();
 
   useEffect(() => {
     if (warmedRef.current) return;
     warmedRef.current = true;
-    // Warmup server cache + preload history data for instant tab switch
+    // Load ALL locations for instant client-side search
+    const loadAllLocations = async () => {
+      // Try localStorage cache first
+      const cached = getCache<LocationResult[]>("allLocations");
+      if (cached && cached.age < 120) {
+        allLocationsRef.current = cached.data;
+      }
+      try {
+        const result = await getAllLocationsApi();
+        if (result.success && result.locations) {
+          allLocationsRef.current = result.locations;
+          setCache("allLocations", result.locations);
+        }
+      } catch {
+        // Fall back to server-side search
+      }
+    };
+    loadAllLocations();
+    // Warmup + preload history in parallel
     warmupCacheApi().catch(() => {});
     if (user?.email) preloadHistory(user.email);
-    // Prefetch input route for instant navigation
+    // Prefetch input route
     router.prefetch("/input");
   }, [user, router]);
 
@@ -93,12 +113,24 @@ export default function ScanPage() {
       return;
     }
 
+    // CLIENT-SIDE filtering if we have all locations (INSTANT — 0ms)
+    if (allLocationsRef.current) {
+      const q = normalized.toLowerCase();
+      const filtered = allLocationsRef.current
+        .filter((loc) => loc.locationCode.toLowerCase().includes(q))
+        .slice(0, 15);
+      setLocationResults(filtered);
+      setShowResults(filtered.length > 0);
+      return;
+    }
+
     if (searchLocationApiDisabled) {
       setLocationResults([]);
       setShowResults(false);
       return;
     }
 
+    // Fallback: server-side search with minimal debounce
     searchTimerRef.current = setTimeout(async () => {
       setSearchLoading(true);
       try {
@@ -120,7 +152,7 @@ export default function ScanPage() {
       } finally {
         setSearchLoading(false);
       }
-    }, 100);
+    }, 80);
   };
 
   const handleSelectLocation = (loc: LocationResult) => {

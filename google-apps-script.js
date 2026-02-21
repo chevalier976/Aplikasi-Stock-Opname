@@ -114,6 +114,8 @@ function doPost(e) {
       case "searchProducts":  result = searchProducts(data.query); break;
       case "searchLocations": result = searchLocations(data.query); break;
       case "warmupCache":     result = warmupCache(data); break;
+      case "getAllLocations":  result = getAllLocations(); break;
+      case "getAllProducts":   result = getAllProducts(); break;
       default:                result = { success: false, message: "Unknown action" };
     }
 
@@ -426,4 +428,49 @@ function deleteEntry(rowId) {
     }
     return { success: false, message: "Entry tidak ditemukan" };
   });
+}
+
+// ──────────────────────────────────────────────────────────────
+// BULK READ — return ALL data for client-side filtering (fast UX)
+// ──────────────────────────────────────────────────────────────
+
+function getAllLocations() {
+  var ck = cacheKey("allLoc", "v1");
+  var cached = cacheGet(ck);
+  if (cached) return cached;
+
+  var data = readMasterData();
+  var map = {};
+  for (var i = 1; i < data.length; i++) {
+    var loc = String(data[i][0]).trim();
+    if (loc) map[loc] = (map[loc] || 0) + 1;
+  }
+  var locations = [];
+  var keys = Object.keys(map).sort();
+  for (var j = 0; j < keys.length; j++) {
+    locations.push({ locationCode: keys[j], productCount: map[keys[j]] });
+  }
+  var resp = { success: true, locations: locations };
+  cachePut(ck, resp, 60);
+  return resp;
+}
+
+function getAllProducts() {
+  var ck = cacheKey("allProd", "v1");
+  var cached = cacheGet(ck);
+  if (cached) return cached;
+
+  var data = readMasterData();
+  var products = [];
+  var seen = {};
+  for (var i = 1; i < data.length; i++) {
+    var sku = normalizeText(data[i][2]);
+    if (sku && !seen[sku]) {
+      seen[sku] = true;
+      products.push({ productName: data[i][1], sku: sku, batch: data[i][3], barcode: data[i][4] || "" });
+    }
+  }
+  var resp = { success: true, products: products };
+  cachePut(ck, resp, 60);
+  return resp;
 }

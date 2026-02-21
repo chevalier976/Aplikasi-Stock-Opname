@@ -126,7 +126,7 @@ export default function QtyInput({ value, onChange, className, wide, onExprCommi
             className="h-9 px-3 rounded-lg bg-primary text-white text-xs font-semibold whitespace-nowrap active:bg-primary-light transition select-none">=</button>
         )}
       </div>
-      {wide && (focused || isExpr) && (
+      {wide && (
         <div className="flex gap-1 mt-1">
           <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => insertOp("+")} className={opBtnCls}>+</button>
           <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => insertOp("-")} className={opBtnCls}>−</button>
