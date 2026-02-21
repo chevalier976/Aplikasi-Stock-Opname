@@ -485,18 +485,36 @@ export default function HistoryPage() {
                             </div>
                           </div>
                         ) : (
-                          <span className="inline-flex items-center justify-end gap-1 cursor-pointer group" onClick={() => startInlineQtyEdit(entry)}>
-                            <span>
-                              {entry.qty.toLocaleString()}
-                              {entry.formula && <span className="ml-0.5 text-[9px] text-text-secondary">🧮</span>}
+                          <div className="inline-flex flex-col items-end">
+                            <span className="inline-flex items-center justify-end gap-1">
+                              {/* Qty number — click to show/hide formula */}
+                              <span
+                                className={entry.formula ? "cursor-pointer underline decoration-dotted" : ""}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (entry.formula) setShowFormula(showFormula === entry.rowId ? null : entry.rowId);
+                                }}
+                              >
+                                {entry.qty.toLocaleString()}
+                                {entry.formula && <span className="ml-0.5 text-[9px] text-text-secondary">🧮</span>}
+                              </span>
+                              {/* Pencil — click to edit */}
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); startInlineQtyEdit(entry); }}
+                                className="text-[10px] text-text-secondary hover:text-primary transition"
+                                title="Edit qty"
+                              >
+                                ✏️
+                              </button>
                             </span>
-                            <span className="text-[10px] text-text-secondary opacity-0 group-hover:opacity-100 transition">✏️</span>
+                            {/* Formula tooltip — shown below the number */}
                             {showFormula === entry.rowId && entry.formula && (
-                              <div className="absolute z-10 bottom-full right-0 mb-1 bg-gray-800 text-white text-[10px] px-2 py-1 rounded shadow-lg whitespace-nowrap">
+                              <div className="mt-1 bg-gray-800 text-white text-[10px] px-2 py-1 rounded shadow-lg whitespace-nowrap">
                                 {entry.formula}
                               </div>
                             )}
-                          </span>
+                          </div>
                         )}
                       </td>
 
