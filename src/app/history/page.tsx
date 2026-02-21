@@ -23,8 +23,6 @@ export default function HistoryPage() {
   // ── Search & Filter state ──
   const [searchQuery, setSearchQuery] = useState("");
   const [filterDate, setFilterDate] = useState("");   // "YYYY-MM-DD"
-  const [filterMonth, setFilterMonth] = useState("");  // "YYYY-MM"
-  const [showFilters, setShowFilters] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   // Inline edit state
@@ -110,25 +108,14 @@ export default function HistoryPage() {
       });
     }
 
-    // Filter by month
-    if (filterMonth) {
-      result = result.filter((e) => {
-        const d = parseTimestamp(e.timestamp);
-        if (!d) return false;
-        const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-        return ym === filterMonth;
-      });
-    }
-
     return result;
-  }, [history, searchQuery, filterDate, filterMonth]);
+  }, [history, searchQuery, filterDate]);
 
-  const hasActiveFilters = searchQuery || filterDate || filterMonth;
+  const hasActiveFilters = searchQuery || filterDate;
 
   const clearAllFilters = () => {
     setSearchQuery("");
     setFilterDate("");
-    setFilterMonth("");
   };
 
   const handleEdit = (entry: HistoryEntry) => {
@@ -316,20 +303,8 @@ export default function HistoryPage() {
     }
   };
 
-  const groupBySession = (entries: HistoryEntry[]) => {
-    const grouped: Record<string, HistoryEntry[]> = {};
-    entries.forEach((entry) => {
-      if (!grouped[entry.sessionId]) {
-        grouped[entry.sessionId] = [];
-      }
-      grouped[entry.sessionId].push(entry);
-    });
-    return grouped;
-  };
-
   const formatDate = (raw: string) => {
     try {
-      // If already formatted like "16 Feb 2026 18:28", return as-is
       if (!/\d{4}-\d{2}-\d{2}T/.test(raw)) return raw;
       const d = new Date(raw);
       const months = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"];
@@ -349,8 +324,6 @@ export default function HistoryPage() {
       </div>
     );
   }
-
-  const groupedHistory = groupBySession(filteredHistory);
 
   return (
     <div className="min-h-screen pb-20">
@@ -385,24 +358,17 @@ export default function HistoryPage() {
           </div>
         </div>
 
-        {/* ── Filter Toggle ── */}
-        <div className="mb-3 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition ${
-              showFilters || filterDate || filterMonth
-                ? "bg-primary text-white border-primary"
-                : "bg-white text-text-primary border-border hover:border-primary"
-            }`}
-          >
-            <span>📅</span> Filter Tanggal
-            {(filterDate || filterMonth) && (
-              <span className="bg-white text-primary text-[10px] font-bold w-4 h-4 rounded-full inline-flex items-center justify-center">
-                {(filterDate ? 1 : 0) + (filterMonth ? 1 : 0)}
-              </span>
-            )}
-          </button>
+        {/* ── Date Filter + Counter ── */}
+        <div className="mb-3 flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-text-secondary">📅</span>
+            <input
+              type="date"
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+              className="px-2 py-1.5 border border-border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
 
           {hasActiveFilters && (
             <button
@@ -410,44 +376,16 @@ export default function HistoryPage() {
               onClick={clearAllFilters}
               className="text-xs text-red-500 hover:text-red-700 font-medium transition"
             >
-              Reset Filter
+              Reset
             </button>
           )}
 
-          {/* Result count */}
           <span className="ml-auto text-[11px] text-text-secondary">
             {filteredHistory.length} / {history.length} entry
           </span>
         </div>
 
-        {/* ── Date & Month Filters (collapsible) ── */}
-        {showFilters && (
-          <div className="mb-4 bg-white border border-border rounded-lg p-3 space-y-3 shadow-sm">
-            <div>
-              <label className="block text-xs font-semibold text-text-secondary mb-1">
-                Filter Tanggal:
-              </label>
-              <input
-                type="date"
-                value={filterDate}
-                onChange={(e) => { setFilterDate(e.target.value); if (e.target.value) setFilterMonth(""); }}
-                className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-text-secondary mb-1">
-                Filter Bulan:
-              </label>
-              <input
-                type="month"
-                value={filterMonth}
-                onChange={(e) => { setFilterMonth(e.target.value); if (e.target.value) setFilterDate(""); }}
-                className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
-          </div>
-        )}
-
+        {/* ── Flat Table ── */}
         {filteredHistory.length === 0 ? (
           <div className="bg-white rounded-lg p-8 text-center">
             <p className="text-text-secondary">
@@ -464,151 +402,126 @@ export default function HistoryPage() {
             )}
           </div>
         ) : (
-          <div className="space-y-4">
-            {Object.entries(groupedHistory).map(([sessionId, entries]) => {
-              const firstEntry = entries[0];
-              const totalItems = entries.reduce((sum, e) => sum + e.qty, 0);
+          <div className="bg-white rounded-lg shadow-md overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-primary text-white">
+                    <th className="text-left px-3 py-2.5 font-semibold whitespace-nowrap">Lokasi</th>
+                    <th className="text-left px-3 py-2.5 font-semibold whitespace-nowrap">Nama Produk</th>
+                    <th className="text-left px-3 py-2.5 font-semibold whitespace-nowrap">Batch</th>
+                    <th className="text-right px-3 py-2.5 font-semibold whitespace-nowrap">Qty Fisik</th>
+                    <th className="text-center px-2 py-2.5 font-semibold whitespace-nowrap">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredHistory.map((entry, idx) => (
+                    <tr
+                      key={entry.rowId}
+                      className={`border-b border-border hover:bg-gray-50 transition ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}
+                    >
+                      {/* Lokasi */}
+                      <td className="px-3 py-2 text-text-secondary whitespace-nowrap text-[11px]">
+                        {entry.location}
+                      </td>
 
-              return (
-                <div
-                  key={sessionId}
-                  className="bg-white rounded-lg shadow-md overflow-hidden"
-                >
-                  <div className="bg-primary-pale px-3 py-2 border-b border-border">
-                    <p className="font-semibold text-text-primary text-xs">
-                      {firstEntry.location} • {formatDate(firstEntry.timestamp)}
-                    </p>
-                    <p className="text-[10px] text-text-secondary truncate">
-                      {sessionId} • {entries.length} produk • {totalItems} item
-                    </p>
-                  </div>
+                      {/* Nama Produk */}
+                      <td className="px-3 py-2 text-text-primary">
+                        <span className="font-medium text-[11px] leading-tight">{entry.productName}</span>
+                        {entry.edited === "Yes" && (
+                          <span className="ml-0.5 text-[10px] text-orange-500" title={`Diedit: ${entry.editTimestamp}`}>✏️</span>
+                        )}
+                        <div className="text-[10px] text-text-secondary">{entry.sku} • {formatDate(entry.timestamp)}</div>
+                      </td>
 
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="bg-gray-50 border-b border-border">
-                          <th className="text-left px-2 py-1 font-semibold text-text-secondary whitespace-nowrap">Produk</th>
-                          <th className="text-left px-2 py-1 font-semibold text-text-secondary whitespace-nowrap">SKU</th>
-                          <th className="text-left px-2 py-1 font-semibold text-text-secondary whitespace-nowrap">Batch</th>
-                          <th className="text-center px-2 py-1 font-semibold text-text-secondary whitespace-nowrap">Qty</th>
-                          <th className="text-center px-1 py-1 font-semibold text-text-secondary whitespace-nowrap">Aksi</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border">
-                        {entries.map((entry) => (
-                          <tr key={entry.rowId} className="hover:bg-gray-50">
-                            <td className="px-2 py-1 text-text-primary">
-                              <span className="break-words font-medium text-[11px] leading-tight">{entry.productName}</span>
-                              {entry.edited === "Yes" && (
-                                <span className="ml-0.5 text-[10px] text-orange-500" title={`Diedit: ${entry.editTimestamp}`}>✏️</span>
-                              )}
-                            </td>
-                            <td className="px-2 py-1 text-text-secondary whitespace-nowrap">{entry.sku}</td>
-                            <td className="px-2 py-1 text-text-secondary whitespace-nowrap">
-                              {editingBatch === entry.rowId ? (
-                                <input
-                                  type="text"
-                                  value={editingBatchValue}
-                                  onChange={(e) => setEditingBatchValue(e.target.value)}
-                                  onBlur={() => saveInlineBatch(entry)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") { e.preventDefault(); saveInlineBatch(entry); }
-                                    if (e.key === "Escape") { setEditingBatch(null); }
-                                  }}
-                                  autoFocus
-                                  className="w-20 px-1 py-0.5 border border-primary rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                                />
-                              ) : (
-                                <span className="inline-flex items-center gap-0.5">
-                                  {entry.batch}
-                                  <button
-                                    type="button"
-                                    onClick={() => startInlineBatchEdit(entry)}
-                                    className="text-[10px] text-text-secondary hover:text-primary transition opacity-60 hover:opacity-100"
-                                    title="Edit batch"
-                                  >
-                                    ✏️
-                                  </button>
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-2 py-1 text-center font-semibold text-primary relative">
-                              {editingQty === entry.rowId ? (
-                                <div className="flex flex-col items-center">
-                                  <QtyInput
-                                    wide
-                                    value={editingQtyValue}
-                                    onChange={(v) => setEditingQtyValue(v)}
-                                    onExprCommit={(expr) => setEditingQtyFormula(expr)}
-                                  />
-                                  <div className="flex gap-1 mt-1">
-                                    <button
-                                      type="button"
-                                      onClick={() => saveInlineQty(entry)}
-                                      className="px-2 py-0.5 bg-green-600 text-white text-[10px] rounded font-semibold hover:bg-green-700 transition"
-                                    >
-                                      💾
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => setEditingQty(null)}
-                                      className="px-2 py-0.5 bg-gray-300 text-text-primary text-[10px] rounded font-semibold hover:bg-gray-400 transition"
-                                    >
-                                      ✕
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <span className="inline-flex items-center justify-center gap-0.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => entry.formula ? setShowFormula(showFormula === entry.rowId ? null : entry.rowId) : null}
-                                    className={entry.formula ? "underline decoration-dotted cursor-pointer" : ""}
-                                  >
-                                    {entry.qty}
-                                    {entry.formula && <span className="ml-0.5 text-[9px] text-text-secondary no-underline">🧮</span>}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => startInlineQtyEdit(entry)}
-                                    className="text-[10px] text-text-secondary hover:text-primary transition opacity-60 hover:opacity-100"
-                                    title="Edit qty"
-                                  >
-                                    ✏️
-                                  </button>
-                                  {showFormula === entry.rowId && entry.formula && (
-                                    <div className="absolute z-10 bottom-full left-1/2 -translate-x-1/2 mb-1 bg-gray-800 text-white text-[10px] px-2 py-1 rounded shadow-lg whitespace-nowrap">
-                                      {entry.formula}
-                                      <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
-                                    </div>
-                                  )}
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-1 py-1 text-center whitespace-nowrap">
-                              <div className="flex items-center justify-center gap-0.5">
-                                <button
-                                  onClick={() => handleEdit(entry)}
-                                  className="px-1.5 py-0.5 bg-primary text-white text-[10px] rounded hover:bg-primary-light transition"
-                                >
-                                  Edit
-                                </button>
-                                <button
-                                  onClick={() => handleDelete(entry)}
-                                  className="px-1.5 py-0.5 bg-red-500 text-white text-[10px] rounded hover:bg-red-600 transition"
-                                >
-                                  Hapus
-                                </button>
+                      {/* Batch — inline editable */}
+                      <td className="px-3 py-2 text-text-secondary whitespace-nowrap">
+                        {editingBatch === entry.rowId ? (
+                          <input
+                            type="text"
+                            value={editingBatchValue}
+                            onChange={(e) => setEditingBatchValue(e.target.value)}
+                            onBlur={() => saveInlineBatch(entry)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") { e.preventDefault(); saveInlineBatch(entry); }
+                              if (e.key === "Escape") { setEditingBatch(null); }
+                            }}
+                            autoFocus
+                            className="w-24 px-1.5 py-0.5 border border-primary rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                          />
+                        ) : (
+                          <span className="inline-flex items-center gap-1 cursor-pointer group" onClick={() => startInlineBatchEdit(entry)}>
+                            {entry.batch}
+                            <span className="text-[10px] text-text-secondary opacity-0 group-hover:opacity-100 transition">✏️</span>
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Qty Fisik — inline editable */}
+                      <td className="px-3 py-2 text-right font-semibold text-primary relative">
+                        {editingQty === entry.rowId ? (
+                          <div className="flex flex-col items-end">
+                            <QtyInput
+                              wide
+                              value={editingQtyValue}
+                              onChange={(v) => setEditingQtyValue(v)}
+                              onExprCommit={(expr) => setEditingQtyFormula(expr)}
+                            />
+                            <div className="flex gap-1 mt-1">
+                              <button
+                                type="button"
+                                onClick={() => saveInlineQty(entry)}
+                                className="px-2 py-0.5 bg-green-600 text-white text-[10px] rounded font-semibold hover:bg-green-700 transition"
+                              >
+                                💾
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingQty(null)}
+                                className="px-2 py-0.5 bg-gray-300 text-text-primary text-[10px] rounded font-semibold hover:bg-gray-400 transition"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center justify-end gap-1 cursor-pointer group" onClick={() => startInlineQtyEdit(entry)}>
+                            <span>
+                              {entry.qty.toLocaleString()}
+                              {entry.formula && <span className="ml-0.5 text-[9px] text-text-secondary">🧮</span>}
+                            </span>
+                            <span className="text-[10px] text-text-secondary opacity-0 group-hover:opacity-100 transition">✏️</span>
+                            {showFormula === entry.rowId && entry.formula && (
+                              <div className="absolute z-10 bottom-full right-0 mb-1 bg-gray-800 text-white text-[10px] px-2 py-1 rounded shadow-lg whitespace-nowrap">
+                                {entry.formula}
                               </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              );
-            })}
+                            )}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Aksi */}
+                      <td className="px-2 py-2 text-center whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => handleEdit(entry)}
+                            className="px-2 py-1 bg-primary text-white text-[10px] rounded hover:bg-primary-light transition font-medium"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDelete(entry)}
+                            className="px-2 py-1 bg-red-500 text-white text-[10px] rounded hover:bg-red-600 transition font-medium"
+                          >
+                            Hapus
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
