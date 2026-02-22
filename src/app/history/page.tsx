@@ -6,8 +6,9 @@ import BottomNav from "@/components/BottomNav";
 import EditModal, { EditData } from "@/components/EditModal";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import QtyInput from "@/components/QtyInput";
-import { getHistoryApi, updateEntryApi, deleteEntryApi, warmupCacheApi } from "@/lib/api";
-import { HistoryEntry } from "@/lib/types";
+import BarcodeScanner from "@/components/BarcodeScanner";
+import { getHistoryApi, updateEntryApi, deleteEntryApi, warmupCacheApi, saveStockOpnameApi, lookupBarcodeApi, searchProductsApi, getAllProductsApi } from "@/lib/api";
+import { HistoryEntry, Product } from "@/lib/types";
 import { getCache, setCache, clearCache } from "@/lib/cache";
 import toast from "react-hot-toast";
 import BrandBLP from "@/components/BrandBLP";
@@ -32,9 +33,32 @@ export default function HistoryPage() {
   const [editingQtyValue, setEditingQtyValue] = useState(0);
   const [editingQtyFormula, setEditingQtyFormula] = useState("");
 
+  // ── Add Product state ──
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addSaving, setAddSaving] = useState(false);
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
+  const [scanningBarcode, setScanningBarcode] = useState(false);
+  const [addSearchResults, setAddSearchResults] = useState<Product[]>([]);
+  const [showAddSuggestions, setShowAddSuggestions] = useState(false);
+  const [addSearchTimer, setAddSearchTimer] = useState<NodeJS.Timeout | null>(null);
+  const [addFormula, setAddFormula] = useState("");
+  const allProductsRef = useRef<Product[] | null>(null);
+  const [addForm, setAddForm] = useState({
+    location: "",
+    productName: "",
+    sku: "",
+    batch: "",
+    barcode: "",
+    qty: 0,
+  });
+
   useEffect(() => {
     fetchHistory();
     warmupCacheApi().catch(() => {});
+    // Load all products for instant search
+    getAllProductsApi().then((res) => {
+      if (res.success && res.products) allProductsRef.current = res.products;
+    }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
@@ -303,6 +327,127 @@ export default function HistoryPage() {
     }
   };
 
+  // ── Add Product handlers ──
+  const handleAddProductSearch = (value: string) => {
+    setAddForm((prev) => ({ ...prev, productName: value }));
+    if (addSearchTimer) clearTimeout(addSearchTimer);
+    if (value.trim().length < 2) {
+      setAddSearchResults([]);
+      setShowAddSuggestions(false);
+      return;
+    }
+    if (allProductsRef.current) {
+      const q = value.trim().toLowerCase();
+      const filtered = allProductsRef.current
+        .filter((p) => p.productName.toLowerCase().includes(q))
+        .slice(0, 10);
+      setAddSearchResults(filtered);
+      setShowAddSuggestions(filtered.length > 0);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const result = await searchProductsApi(value.trim());
+        if (result.success && result.products) {
+          setAddSearchResults(result.products);
+          setShowAddSuggestions(result.products.length > 0);
+        }
+      } catch (error) {
+        console.error("Search error:", error);
+      }
+    }, 80);
+    setAddSearchTimer(timer);
+  };
+
+  const handleAddSelectSuggestion = (product: Product) => {
+    setAddForm((prev) => ({
+      ...prev,
+      productName: product.productName,
+      sku: product.sku,
+      batch: product.batch,
+      barcode: product.barcode || prev.barcode,
+    }));
+    setShowAddSuggestions(false);
+    setAddSearchResults([]);
+    toast.success(`Produk dipilih: ${product.productName}`);
+  };
+
+  const handleAddBarcodeScan = async (barcode: string) => {
+    setShowBarcodeScanner(false);
+    setScanningBarcode(true);
+    try {
+      const result = await lookupBarcodeApi(barcode);
+      if (result.success && result.product) {
+        setAddForm((prev) => ({
+          ...prev,
+          productName: result.product!.productName,
+          sku: result.product!.sku,
+          batch: result.product!.batch || "",
+          barcode: barcode,
+        }));
+        toast.success(`Produk ditemukan: ${result.product.productName}`);
+      } else {
+        setAddForm((prev) => ({ ...prev, barcode }));
+        toast.error(result.message || "Produk tidak ditemukan, isi manual");
+      }
+    } catch (error) {
+      console.error("Barcode lookup error:", error);
+      setAddForm((prev) => ({ ...prev, barcode }));
+      toast.error("Gagal lookup barcode, isi data manual");
+    } finally {
+      setScanningBarcode(false);
+    }
+  };
+
+  const handleAddProduct = async () => {
+    if (!addForm.location.trim()) {
+      toast.error("Lokasi harus diisi");
+      return;
+    }
+    if (!addForm.productName || !addForm.sku || !addForm.batch) {
+      toast.error("Nama Produk, SKU, dan Batch harus diisi");
+      return;
+    }
+    if (addForm.qty <= 0) {
+      toast.error("Quantity harus lebih dari 0");
+      return;
+    }
+
+    setAddSaving(true);
+    const sessionId = `${user?.email}_${Date.now()}`;
+    const timestamp = new Date().toISOString();
+    const items = [{
+      productName: addForm.productName,
+      sku: addForm.sku,
+      batch: addForm.batch,
+      barcode: addForm.barcode || "",
+      qty: addForm.qty,
+      formula: addFormula || "",
+      isNew: true,
+    }];
+
+    try {
+      const result = await saveStockOpnameApi(sessionId, user?.email || "", addForm.location.trim(), timestamp, items);
+      if (result.success) {
+        toast.success("Produk berhasil ditambahkan!");
+        // Reset form
+        setAddForm({ location: addForm.location, productName: "", sku: "", batch: "", barcode: "", qty: 0 });
+        setAddFormula("");
+        setShowAddForm(false);
+        // Refresh history
+        clearCache("history:");
+        fetchHistory();
+      } else {
+        toast.error(result.message || "Gagal menyimpan produk");
+      }
+    } catch (error) {
+      console.error("Save error:", error);
+      toast.error("Gagal menyimpan produk");
+    } finally {
+      setAddSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center pb-20">
@@ -370,6 +515,177 @@ export default function HistoryPage() {
             {filteredHistory.length} / {history.length} entry
           </span>
         </div>
+
+        {/* ── Add Product Button ── */}
+        <div className="mb-3">
+          <button
+            onClick={() => setShowAddForm(!showAddForm)}
+            className="w-full bg-primary text-white py-2.5 rounded-lg font-semibold hover:bg-primary-light transition text-sm"
+          >
+            {showAddForm ? "✕ Tutup Form" : "+ Tambah Produk Baru"}
+          </button>
+        </div>
+
+        {/* ── Add Product Form ── */}
+        {showAddForm && (
+          <div className="bg-white border border-border rounded-lg p-4 mb-4 shadow-md">
+            <h3 className="text-sm font-semibold mb-3 text-text-primary">Tambah Produk Baru</h3>
+
+            {scanningBarcode && (
+              <div className="mb-3 flex items-center justify-center gap-2 text-xs text-text-secondary">
+                <LoadingSpinner /> Mencari produk...
+              </div>
+            )}
+
+            <div className="space-y-2.5">
+              {/* Lokasi */}
+              <div>
+                <label className="block text-xs font-medium text-text-primary mb-1">Lokasi</label>
+                <input
+                  type="text"
+                  value={addForm.location}
+                  onChange={(e) => setAddForm({ ...addForm, location: e.target.value })}
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                  placeholder="Contoh: CEN/PARAS/PLT/A1/02"
+                />
+              </div>
+
+              {/* Barcode */}
+              <div>
+                <label className="block text-xs font-medium text-text-primary mb-1">Barcode</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={addForm.barcode}
+                    onChange={(e) => setAddForm({ ...addForm, barcode: e.target.value.trim() })}
+                    onKeyDown={(e) => {
+                      const bv = String(addForm.barcode || "").trim();
+                      if (e.key === "Enter" && bv) { e.preventDefault(); handleAddBarcodeScan(bv); }
+                    }}
+                    className="w-full pl-3 pr-20 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm bg-gray-50"
+                    placeholder="Scan / ketik barcode"
+                    autoComplete="off"
+                  />
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => { const bv = String(addForm.barcode || "").trim(); if (bv) handleAddBarcodeScan(bv); }}
+                      disabled={!String(addForm.barcode || "").trim() || scanningBarcode}
+                      className="w-8 h-8 rounded-lg border border-border bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                      title="Cari barcode"
+                    >
+                      🔍
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowBarcodeScanner(true)}
+                      disabled={scanningBarcode}
+                      className="w-8 h-8 rounded-lg border border-border bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                      title="Scan barcode"
+                    >
+                      📷
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Nama Produk + Search */}
+              <div className="relative">
+                <label className="block text-xs font-medium text-text-primary mb-1">Nama Produk</label>
+                <input
+                  type="text"
+                  value={addForm.productName}
+                  onChange={(e) => handleAddProductSearch(e.target.value)}
+                  onFocus={() => { if (addSearchResults.length > 0) setShowAddSuggestions(true); }}
+                  onBlur={() => { setTimeout(() => setShowAddSuggestions(false), 200); }}
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                  placeholder="Ketik min. 2 huruf untuk cari produk..."
+                  autoComplete="off"
+                />
+                {showAddSuggestions && addSearchResults.length > 0 && (
+                  <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {addSearchResults.map((p, idx) => (
+                      <button
+                        key={`${p.sku}-${idx}`}
+                        type="button"
+                        className="w-full text-left px-3 py-2 hover:bg-primary-pale transition border-b border-border last:border-b-0"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => handleAddSelectSuggestion(p)}
+                      >
+                        <p className="font-medium text-text-primary text-xs">{p.productName}</p>
+                        <p className="text-[10px] text-text-secondary">SKU: {p.sku} | Batch: {p.batch}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* SKU */}
+              <div>
+                <label className="block text-xs font-medium text-text-primary mb-1">SKU</label>
+                <input
+                  type="text"
+                  value={addForm.sku}
+                  onChange={(e) => setAddForm({ ...addForm, sku: e.target.value })}
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                  placeholder="Masukkan SKU"
+                />
+              </div>
+
+              {/* Batch */}
+              <div>
+                <label className="block text-xs font-medium text-text-primary mb-1">Batch</label>
+                <input
+                  type="text"
+                  value={addForm.batch}
+                  onChange={(e) => setAddForm({ ...addForm, batch: e.target.value })}
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                  placeholder="Masukkan batch"
+                />
+              </div>
+
+              {/* Qty with formula support */}
+              <div>
+                <label className="block text-xs font-medium text-text-primary mb-1">Quantity <span className="text-[10px] text-text-secondary font-normal">(bisa pakai rumus: 10+5, 10x10+5)</span></label>
+                <QtyInput
+                  value={addForm.qty}
+                  onChange={(v) => setAddForm((prev) => ({ ...prev, qty: v }))}
+                  onExprCommit={(expr) => setAddFormula(expr)}
+                  wide
+                />
+              </div>
+
+              <button
+                onClick={handleAddProduct}
+                disabled={addSaving}
+                className="w-full bg-primary text-white py-2.5 rounded-lg font-semibold hover:bg-primary-light transition text-sm disabled:opacity-50"
+              >
+                {addSaving ? <LoadingSpinner /> : "Simpan Produk"}
+              </button>
+            </div>
+
+            {/* Barcode Scanner Modal */}
+            {showBarcodeScanner && (
+              <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+                <div className="bg-white w-full max-w-md rounded-2xl p-4 shadow-2xl">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold text-text-primary text-sm">Scan Barcode Produk</h3>
+                    <button
+                      onClick={() => setShowBarcodeScanner(false)}
+                      className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-500"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <BarcodeScanner
+                    onScan={(code) => handleAddBarcodeScan(code)}
+                    active={showBarcodeScanner}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Flat Table ── */}
         {filteredHistory.length === 0 ? (
