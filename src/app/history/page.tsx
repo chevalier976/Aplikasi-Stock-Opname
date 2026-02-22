@@ -7,7 +7,7 @@ import EditModal, { EditData } from "@/components/EditModal";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import QtyInput from "@/components/QtyInput";
 import BarcodeScanner from "@/components/BarcodeScanner";
-import { getHistoryApi, updateEntryApi, deleteEntryApi, warmupCacheApi, saveStockOpnameApi, lookupBarcodeApi, searchProductsApi, getAllProductsApi } from "@/lib/api";
+import { getHistoryApi, updateEntryApi, deleteEntryApi, warmupCacheApi, saveStockOpnameApi, lookupBarcodeApi, searchProductsApi, getAllProductsApi, getAllLocationsApi } from "@/lib/api";
 import { HistoryEntry, Product } from "@/lib/types";
 import { getCache, setCache, clearCache } from "@/lib/cache";
 import toast from "react-hot-toast";
@@ -43,6 +43,10 @@ export default function HistoryPage() {
   const [addSearchTimer, setAddSearchTimer] = useState<NodeJS.Timeout | null>(null);
   const [addFormula, setAddFormula] = useState("");
   const allProductsRef = useRef<Product[] | null>(null);
+  const allLocationsRef = useRef<Array<{ locationCode: string; productCount: number }> | null>(null);
+  const [locationResults, setLocationResults] = useState<Array<{ locationCode: string; productCount: number }>>([]);
+  const [showLocationSuggestions, setShowLocationSuggestions] = useState(false);
+  const [showLocationScanner, setShowLocationScanner] = useState(false);
   const [addForm, setAddForm] = useState({
     location: "",
     productName: "",
@@ -58,6 +62,10 @@ export default function HistoryPage() {
     // Load all products for instant search
     getAllProductsApi().then((res) => {
       if (res.success && res.products) allProductsRef.current = res.products;
+    }).catch(() => {});
+    // Load all locations for instant location search
+    getAllLocationsApi().then((res) => {
+      if (res.success && res.locations) allLocationsRef.current = res.locations;
     }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
@@ -328,6 +336,55 @@ export default function HistoryPage() {
   };
 
   // ── Add Product handlers ──
+  const normalizeLocationCode = (value: string) => value.toUpperCase().replace(/\s+/g, "").trim();
+
+  const handleLocationSearch = (value: string) => {
+    const normalized = normalizeLocationCode(value);
+    setAddForm((prev) => ({ ...prev, location: normalized }));
+
+    if (normalized.length < 1) {
+      setLocationResults([]);
+      setShowLocationSuggestions(false);
+      return;
+    }
+
+    // Build combined location list: API locations + unique history locations
+    let candidates: Array<{ locationCode: string; productCount: number }> = [];
+
+    if (allLocationsRef.current) {
+      candidates = [...allLocationsRef.current];
+    }
+
+    // Add unique locations from history that aren't already in candidates
+    const existingCodes = new Set(candidates.map((c) => c.locationCode.toLowerCase()));
+    const historyLocations = new Set(history.map((e) => e.location));
+    historyLocations.forEach((loc) => {
+      if (!existingCodes.has(loc.toLowerCase())) {
+        candidates.push({ locationCode: loc, productCount: 0 });
+      }
+    });
+
+    const q = normalized.toLowerCase();
+    const filtered = candidates
+      .filter((loc) => loc.locationCode.toLowerCase().includes(q))
+      .slice(0, 15);
+    setLocationResults(filtered);
+    setShowLocationSuggestions(filtered.length > 0);
+  };
+
+  const handleSelectLocation = (loc: { locationCode: string }) => {
+    setAddForm((prev) => ({ ...prev, location: loc.locationCode }));
+    setLocationResults([]);
+    setShowLocationSuggestions(false);
+  };
+
+  const handleLocationBarcodeScan = (code: string) => {
+    setShowLocationScanner(false);
+    const normalized = normalizeLocationCode(code);
+    setAddForm((prev) => ({ ...prev, location: normalized }));
+    toast.success(`Lokasi: ${normalized}`);
+  };
+
   const handleAddProductSearch = (value: string) => {
     setAddForm((prev) => ({ ...prev, productName: value }));
     if (addSearchTimer) clearTimeout(addSearchTimer);
@@ -539,15 +596,46 @@ export default function HistoryPage() {
 
             <div className="space-y-2.5">
               {/* Lokasi */}
-              <div>
+              <div className="relative">
                 <label className="block text-xs font-medium text-text-primary mb-1">Lokasi</label>
-                <input
-                  type="text"
-                  value={addForm.location}
-                  onChange={(e) => setAddForm({ ...addForm, location: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
-                  placeholder="Contoh: CEN/PARAS/PLT/A1/02"
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={addForm.location}
+                    onChange={(e) => handleLocationSearch(e.target.value)}
+                    onFocus={() => { if (locationResults.length > 0) setShowLocationSuggestions(true); }}
+                    onBlur={() => { setTimeout(() => setShowLocationSuggestions(false), 200); }}
+                    className="w-full pl-3 pr-12 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                    placeholder="Ketik atau scan lokasi..."
+                    autoComplete="off"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowLocationScanner(true)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg border border-border bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50"
+                    title="Scan barcode lokasi"
+                  >
+                    📷
+                  </button>
+                </div>
+                {showLocationSuggestions && locationResults.length > 0 && (
+                  <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {locationResults.map((loc, idx) => (
+                      <button
+                        key={`loc-${idx}`}
+                        type="button"
+                        className="w-full text-left px-3 py-2 hover:bg-primary-pale transition border-b border-border last:border-b-0"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => handleSelectLocation(loc)}
+                      >
+                        <p className="font-medium text-text-primary text-xs">{loc.locationCode}</p>
+                        {loc.productCount > 0 && (
+                          <p className="text-[10px] text-text-secondary">{loc.productCount} produk</p>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Barcode */}
@@ -664,7 +752,7 @@ export default function HistoryPage() {
               </button>
             </div>
 
-            {/* Barcode Scanner Modal */}
+            {/* Barcode Scanner Modal - Produk */}
             {showBarcodeScanner && (
               <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
                 <div className="bg-white w-full max-w-md rounded-2xl p-4 shadow-2xl">
@@ -680,6 +768,27 @@ export default function HistoryPage() {
                   <BarcodeScanner
                     onScan={(code) => handleAddBarcodeScan(code)}
                     active={showBarcodeScanner}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Barcode Scanner Modal - Lokasi */}
+            {showLocationScanner && (
+              <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+                <div className="bg-white w-full max-w-md rounded-2xl p-4 shadow-2xl">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold text-text-primary text-sm">Scan Barcode Lokasi</h3>
+                    <button
+                      onClick={() => setShowLocationScanner(false)}
+                      className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-500"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <BarcodeScanner
+                    onScan={(code) => handleLocationBarcodeScan(code)}
+                    active={showLocationScanner}
                   />
                 </div>
               </div>
