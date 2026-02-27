@@ -42,7 +42,7 @@ export default function ScanPage() {
     const loadAllLocations = async () => {
       // Try localStorage cache first
       const cached = getCache<LocationResult[]>("allLocations");
-      if (cached && cached.age < 120) {
+      if (cached && cached.age < 300) {
         allLocationsRef.current = cached.data;
       }
       try {
@@ -82,11 +82,30 @@ export default function ScanPage() {
   };
 
   const searchLocation = async (code: string) => {
+    // INSTANT NAVIGATE — don't wait for server!
+    // If we have allLocations, check if location exists locally first
+    if (allLocationsRef.current) {
+      const exists = allLocationsRef.current.some(
+        (loc) => loc.locationCode.toLowerCase() === code.toLowerCase()
+      );
+      if (exists) {
+        toast.success("Lokasi ditemukan!");
+        // Preload products in background — don't block navigation
+        getProductsApi(code).then((result) => {
+          if (result.success && result.products) {
+            setCache(`products:${code}`, result.products);
+          }
+        }).catch(() => {});
+        router.push(`/input?location=${encodeURIComponent(code)}`);
+        return;
+      }
+    }
+
+    // Fallback: check server (location might exist but not in cached list)
     setLoading(true);
     try {
       const result = await getProductsApi(code);
       if (result.success && result.products && result.products.length > 0) {
-        // Pre-cache products so input page renders INSTANTLY
         setCache(`products:${code}`, result.products);
         toast.success("Lokasi ditemukan!");
         router.push(`/input?location=${encodeURIComponent(code)}`);
@@ -95,7 +114,7 @@ export default function ScanPage() {
       }
     } catch (error) {
       console.error("Search error:", error);
-      toast.error("Koneksi ke server lokasi bermasalah. Cek URL Apps Script & deploy Web App (Anyone).");
+      toast.error("Koneksi ke server bermasalah. Coba lagi.");
     } finally {
       setLoading(false);
     }

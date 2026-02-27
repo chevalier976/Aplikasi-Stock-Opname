@@ -8,7 +8,7 @@ import LoadingSpinner from "@/components/LoadingSpinner";
 import BarcodeScanner from "@/components/BarcodeScanner";
 import QtyInput from "@/components/QtyInput";
 import { calcExpr } from "@/components/QtyInput";
-import { getProductsApi, saveStockOpnameApi, deleteProductApi, lookupBarcodeApi, searchProductsApi, warmupCacheApi, preloadHistory, getAllProductsApi } from "@/lib/api";
+import { getProductsApi, saveStockOpnameApi, deleteProductApi, lookupBarcodeApi, searchProductsApi, warmupCacheApi, preloadHistory, getAllProductsApi, invalidateMemCache } from "@/lib/api";
 import { Product } from "@/lib/types";
 import { getCache, setCache, clearCache } from "@/lib/cache";
 import toast from "react-hot-toast";
@@ -382,7 +382,8 @@ function InputPageContent() {
       .catch(() => toast.error("Gagal sinkron ke server"));
 
     // Navigate immediately — don't wait for server
-    clearCache("history:");
+    // Only invalidate memCache, keep localStorage cache for instant history display
+    invalidateMemCache("getHistory");
     clearCache("products:");
     toast.success("Stock opname berhasil disimpan!");
     router.push("/scan");

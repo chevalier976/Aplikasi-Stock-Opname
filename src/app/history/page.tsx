@@ -59,13 +59,23 @@ export default function HistoryPage() {
   useEffect(() => {
     fetchHistory();
     warmupCacheApi().catch(() => {});
-    // Load all products for instant search
+    // Load all products + locations in parallel for instant search
+    const cachedProducts = getCache<Product[]>("allProducts");
+    if (cachedProducts) allProductsRef.current = cachedProducts.data;
+    const cachedLocations = getCache<Array<{ locationCode: string; productCount: number }>>("allLocations");
+    if (cachedLocations) allLocationsRef.current = cachedLocations.data;
+    // Background refresh
     getAllProductsApi().then((res) => {
-      if (res.success && res.products) allProductsRef.current = res.products;
+      if (res.success && res.products) {
+        allProductsRef.current = res.products;
+        setCache("allProducts", res.products);
+      }
     }).catch(() => {});
-    // Load all locations for instant location search
     getAllLocationsApi().then((res) => {
-      if (res.success && res.locations) allLocationsRef.current = res.locations;
+      if (res.success && res.locations) {
+        allLocationsRef.current = res.locations;
+        setCache("allLocations", res.locations);
+      }
     }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
@@ -470,7 +480,6 @@ export default function HistoryPage() {
       return;
     }
 
-    setAddSaving(true);
     const sessionId = `${user?.email}_${Date.now()}`;
     const timestamp = new Date().toISOString();
     const items = [{
@@ -483,26 +492,45 @@ export default function HistoryPage() {
       isNew: true,
     }];
 
-    try {
-      const result = await saveStockOpnameApi(sessionId, user?.email || "", addForm.location.trim(), timestamp, items);
-      if (result.success) {
-        toast.success("Produk berhasil ditambahkan!");
-        // Reset form
-        setAddForm({ location: addForm.location, productName: "", sku: "", batch: "", barcode: "", qty: 0 });
-        setAddFormula("");
-        setShowAddForm(false);
-        // Refresh history
-        clearCache("history:");
-        fetchHistory();
-      } else {
-        toast.error(result.message || "Gagal menyimpan produk");
-      }
-    } catch (error) {
-      console.error("Save error:", error);
-      toast.error("Gagal menyimpan produk");
-    } finally {
-      setAddSaving(false);
-    }
+    // OPTIMISTIC: Add to history UI immediately — don't wait for server
+    const newEntry: HistoryEntry = {
+      sessionId,
+      rowId: `temp_${Date.now()}`,
+      timestamp,
+      operator: user?.email || "",
+      location: addForm.location.trim(),
+      productName: addForm.productName,
+      sku: addForm.sku,
+      batch: addForm.batch,
+      qty: addForm.qty,
+      edited: "",
+      editTimestamp: "",
+      formula: addFormula || "",
+    };
+    setHistory((prev) => [newEntry, ...prev]);
+    const ck = `history:${user?.email}:all`;
+    setCache(ck, [newEntry, ...history]);
+
+    // Reset form immediately
+    setAddForm({ location: addForm.location, productName: "", sku: "", batch: "", barcode: "", qty: 0 });
+    setAddFormula("");
+    setShowAddForm(false);
+    toast.success("Produk berhasil ditambahkan!");
+
+    // Background sync to server
+    saveStockOpnameApi(sessionId, user?.email || "", addForm.location.trim(), timestamp, items)
+      .then((result) => {
+        if (result.success) {
+          // Refresh history to get real rowId
+          clearCache("history:");
+          fetchHistory();
+        } else {
+          toast.error(result.message || "Gagal sinkron ke server");
+        }
+      })
+      .catch(() => {
+        toast.error("Gagal sinkron ke server");
+      });
   };
 
   if (loading) {
@@ -745,10 +773,9 @@ export default function HistoryPage() {
 
               <button
                 onClick={handleAddProduct}
-                disabled={addSaving}
-                className="w-full bg-primary text-white py-2.5 rounded-lg font-semibold hover:bg-primary-light transition text-sm disabled:opacity-50"
+                className="w-full bg-primary text-white py-2.5 rounded-lg font-semibold hover:bg-primary-light transition text-sm"
               >
-                {addSaving ? <LoadingSpinner /> : "Simpan Produk"}
+                Simpan Produk
               </button>
             </div>
 

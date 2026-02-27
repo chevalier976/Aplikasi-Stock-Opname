@@ -14,14 +14,14 @@ const memCache = new Map<string, MemEntry>();
 
 // TTL per action (ms) — only read-like actions are cached
 const CACHE_TTL: Record<string, number> = {
-  searchLocations: 60_000,   // 1 min
-  searchProducts:  60_000,
+  searchLocations: 120_000,  // 2 min
+  searchProducts:  120_000,  // 2 min
   lookupBarcode:  120_000,   // 2 min
-  getProducts:     30_000,   // 30 s
-  getHistory:      15_000,   // 15 s
+  getProducts:     60_000,   // 1 min
+  getHistory:      60_000,   // 1 min (was 15s — too aggressive)
   warmupCache:    300_000,   // 5 min
-  getAllLocations: 120_000,  // 2 min — bulk data
-  getAllProducts:  120_000,  // 2 min — bulk data
+  getAllLocations: 300_000,   // 5 min — bulk data, rarely changes
+  getAllProducts:  300_000,   // 5 min — bulk data, rarely changes
 };
 
 function getMemCache(key: string, ttl: number): any | null {
@@ -88,6 +88,9 @@ export const apiCall = async (
 
   const request = (async () => {
     try {
+      // Timeout: GAS cold starts can be 3-10s. Abort after 15s.
+      const timeoutId = setTimeout(() => controller.abort(), 15_000);
+
       const response = await fetch(API_URL, {
         method: "POST",
         headers: {
@@ -96,6 +99,8 @@ export const apiCall = async (
         body: JSON.stringify({ action, ...data }),
         signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -111,7 +116,7 @@ export const apiCall = async (
       return result;
     } catch (error: any) {
       if (error?.name === "AbortError") {
-        return { success: false, message: "Request dibatalkan" };
+        return { success: false, message: "Request timeout" };
       }
       console.error("API call error:", error);
       throw error;
