@@ -149,6 +149,13 @@ export default function HistoryPage() {
       });
     }
 
+    // Sort newest first
+    result = [...result].sort((a, b) => {
+      const ta = new Date(a.timestamp).getTime() || 0;
+      const tb = new Date(b.timestamp).getTime() || 0;
+      return tb - ta;
+    });
+
     return result;
   }, [history, searchQuery, filterDate]);
 

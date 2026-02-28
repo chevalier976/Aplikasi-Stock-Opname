@@ -52,11 +52,16 @@ export default function ScanPage() {
         locationMap.set(e.location, { items: 1, timestamp: e.timestamp, operator: e.operator });
       } else {
         existing.items += 1;
+        // Keep the newest timestamp per location
+        if (new Date(e.timestamp).getTime() > new Date(existing.timestamp).getTime()) {
+          existing.timestamp = e.timestamp;
+        }
       }
     });
 
     const recentScans = Array.from(locationMap.entries())
       .map(([loc, data]) => ({ location: loc, ...data }))
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
       .slice(0, 5);
 
     return { total, scannedCount, pending, progress, recentScans };
