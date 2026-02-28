@@ -12,7 +12,6 @@ import { getProductsApi, saveStockOpnameApi, deleteProductApi, lookupBarcodeApi,
 import { Product } from "@/lib/types";
 import { getCache, setCache, clearCache } from "@/lib/cache";
 import toast from "react-hot-toast";
-import BrandBLP from "@/components/BrandBLP";
 
 function InputPageContent() {
   const { user } = useAuth();
@@ -391,7 +390,7 @@ function InputPageContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-[var(--primary-bg)]">
         <LoadingSpinner />
       </div>
     );
@@ -401,191 +400,163 @@ function InputPageContent() {
   const totalItems = Object.values(quantities).reduce((sum, qty) => sum + qty, 0);
 
   return (
-    <div className="min-h-screen pb-32">
-      <div className="bg-primary text-white p-6 shadow-md">
-        <div className="mb-1"><BrandBLP className="text-white text-2xl" /></div>
-        <h1 className="text-xl font-bold mb-1">Input Quantity</h1>
-        <p className="text-primary-pale">Lokasi: {location}</p>
+    <div className="min-h-screen pb-32 bg-[var(--primary-bg)]">
+      {/* ── Header ── */}
+      <div className="bg-white px-5 pt-6 pb-4 shadow-card">
+        <div className="flex items-center gap-3 mb-1">
+          <button onClick={() => router.push("/scan")} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition">
+            <svg className="w-4 h-4 text-text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6" /></svg>
+          </button>
+          <div>
+            <h1 className="text-lg font-bold text-text-primary">Input Quantity</h1>
+            <p className="text-xs text-text-secondary">Lokasi: <span className="font-semibold text-primary">{location}</span></p>
+          </div>
+        </div>
       </div>
 
-      <div className="p-4">
-        <div className="bg-primary-pale border border-primary rounded-lg p-4 mb-4">
-          <p className="text-text-primary">
-            <span className="font-semibold">Total Produk:</span> {allProducts.length}
-          </p>
-          <p className="text-text-primary">
-            <span className="font-semibold">Total Item:</span> {totalItems}
-          </p>
+      <div className="px-4 pt-3">
+        {/* ── Stats Card ── */}
+        <div className="bg-white rounded-2xl p-4 mb-3 shadow-card border border-border">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                <svg className="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-xs text-text-secondary">Total Produk</p>
+                <p className="text-lg font-bold text-text-primary">{allProducts.length}</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-text-secondary">Total Item</p>
+              <p className="text-lg font-bold text-primary">{totalItems}</p>
+            </div>
+          </div>
         </div>
 
-        {/* Add New Product Button */}
-        <div className="mb-4">
+        {/* ── Add New Product Button ── */}
+        <div className="mb-3">
           <button
             onClick={() => setShowAddForm(!showAddForm)}
-            className="w-full bg-primary text-white py-3 rounded-lg font-semibold hover:bg-primary-light transition"
+            className="w-full bg-primary text-white py-3 rounded-2xl font-semibold hover:bg-primary-light transition text-sm shadow-card active:scale-[0.98]"
           >
-            {showAddForm ? "Tutup Form" : "+ Tambah Produk Baru"}
+            {showAddForm ? "✕ Tutup Form" : "+ Tambah Produk Baru"}
           </button>
         </div>
 
-        {/* Add New Product Form */}
+        {/* ── Add New Product Form ── */}
         {showAddForm && (
-          <div className="bg-white border border-border rounded-lg p-4 mb-4 shadow-md">
-            <h3 className="text-lg font-semibold mb-3 text-text-primary">
-              Tambah Produk Baru
-            </h3>
+          <div className="bg-white border border-border rounded-2xl p-4 mb-4 shadow-card">
+            <h3 className="text-sm font-semibold mb-3 text-text-primary">Tambah Produk Baru</h3>
 
             {scanningBarcode && (
-              <div className="mb-3 flex items-center justify-center gap-2 text-sm text-text-secondary">
+              <div className="mb-3 flex items-center justify-center gap-2 text-xs text-text-secondary">
                 <LoadingSpinner /> Mencari produk...
               </div>
             )}
 
-            <div className="space-y-3">
+            <div className="space-y-2.5">
+              {/* Barcode */}
               <div>
-                <label className="block text-sm font-medium text-text-primary mb-1">
-                  Barcode
-                </label>
+                <label className="block text-xs font-medium text-text-primary mb-1">Barcode</label>
                 <div className="relative">
-                  <svg
-                    className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary pointer-events-none"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
+                  <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2" />
                     <path d="M7 12h10" />
-                    <path d="M7 9h2M11 9h2M15 9h2M7 15h2M11 15h2M15 15h2" />
                   </svg>
                   <input
                     type="text"
                     value={newProductForm.barcode}
-                    onChange={(e) =>
-                      setNewProductForm({ ...newProductForm, barcode: e.target.value.trim() })
-                    }
+                    onChange={(e) => setNewProductForm({ ...newProductForm, barcode: e.target.value.trim() })}
                     onKeyDown={(e) => {
                       const barcodeVal = String(newProductForm.barcode || "").trim();
-                      if (e.key === "Enter" && barcodeVal) {
-                        e.preventDefault();
-                        handleBarcodeScan(barcodeVal);
-                      }
+                      if (e.key === "Enter" && barcodeVal) { e.preventDefault(); handleBarcodeScan(barcodeVal); }
                     }}
-                    className="w-full pl-11 pr-24 py-2.5 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-gray-50"
+                    className="w-full pl-10 pr-20 py-2.5 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary bg-gray-50 text-sm"
                     placeholder="Scan / ketik barcode produk"
                     autoComplete="off"
                   />
                   <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
                     <button
                       type="button"
-                      onClick={() => {
-                        const barcodeVal = String(newProductForm.barcode || "").trim();
-                        if (barcodeVal) handleBarcodeScan(barcodeVal);
-                      }}
+                      onClick={() => { const barcodeVal = String(newProductForm.barcode || "").trim(); if (barcodeVal) handleBarcodeScan(barcodeVal); }}
                       disabled={!String(newProductForm.barcode || "").trim() || scanningBarcode}
-                      className="w-9 h-9 rounded-lg border border-border bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                      className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary hover:bg-primary/20 disabled:opacity-50"
                       title="Cari barcode"
                     >
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <circle cx="11" cy="11" r="8" />
-                        <path d="M21 21l-4.35-4.35" />
-                      </svg>
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
                     </button>
                     <button
                       type="button"
                       onClick={() => setShowBarcodeScanner(true)}
                       disabled={scanningBarcode}
-                      className="w-9 h-9 rounded-lg border border-border bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                      className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary hover:bg-primary/20 disabled:opacity-50"
                       title="Scan barcode"
                     >
-                      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2" />
                         <path d="M7 12h10" />
-                        <path d="M7 9h2M11 9h2M15 9h2M7 15h2M11 15h2M15 15h2" />
                       </svg>
                     </button>
                   </div>
                 </div>
               </div>
+
+              {/* Nama Produk + Search */}
               <div className="relative">
-                <label className="block text-sm font-medium text-text-primary mb-1">
-                  Nama Produk
-                </label>
+                <label className="block text-xs font-medium text-text-primary mb-1">Nama Produk</label>
                 <input
                   type="text"
                   value={newProductForm.productName}
                   onChange={(e) => handleProductNameSearch(e.target.value)}
-                  onFocus={() => {
-                    if (searchResults.length > 0) setShowSuggestions(true);
-                  }}
-                  onBlur={() => {
-                    // Delay to allow click on suggestion
-                    setTimeout(() => setShowSuggestions(false), 200);
-                  }}
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                  onFocus={() => { if (searchResults.length > 0) setShowSuggestions(true); }}
+                  onBlur={() => { setTimeout(() => setShowSuggestions(false), 200); }}
+                  className="w-full px-3 py-2.5 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-sm"
                   placeholder="Ketik min. 2 huruf untuk cari produk..."
                   autoComplete="off"
                 />
                 {showSuggestions && searchResults.length > 0 && (
-                  <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-border rounded-xl shadow-lg max-h-48 overflow-y-auto">
                     {searchResults.map((p, idx) => (
                       <button
                         key={`${p.sku}-${idx}`}
                         type="button"
-                        className="w-full text-left px-3 py-2 hover:bg-primary-pale transition border-b border-border last:border-b-0"
+                        className="w-full text-left px-3 py-2.5 hover:bg-primary-pale transition border-b border-border last:border-b-0"
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => handleSelectSuggestion(p)}
                       >
-                        <p className="font-medium text-text-primary text-sm">{p.productName}</p>
-                        <p className="text-xs text-text-secondary">SKU: {p.sku} | Batch: {p.batch}</p>
+                        <p className="font-medium text-text-primary text-xs">{p.productName}</p>
+                        <p className="text-[10px] text-text-secondary">SKU: {p.sku} | Batch: {p.batch}</p>
                       </button>
                     ))}
                   </div>
                 )}
               </div>
+
+              {/* SKU */}
               <div>
-                <label className="block text-sm font-medium text-text-primary mb-1">
-                  SKU
-                </label>
-                <input
-                  type="text"
-                  value={newProductForm.sku}
-                  onChange={(e) =>
-                    setNewProductForm({ ...newProductForm, sku: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                  placeholder="Masukkan SKU"
-                />
+                <label className="block text-xs font-medium text-text-primary mb-1">SKU</label>
+                <input type="text" value={newProductForm.sku} onChange={(e) => setNewProductForm({ ...newProductForm, sku: e.target.value })}
+                  className="w-full px-3 py-2.5 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-sm" placeholder="Masukkan SKU" />
               </div>
+
+              {/* Batch */}
               <div>
-                <label className="block text-sm font-medium text-text-primary mb-1">
-                  Batch
-                </label>
-                <input
-                  type="text"
-                  value={newProductForm.batch}
-                  onChange={(e) =>
-                    setNewProductForm({ ...newProductForm, batch: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                  placeholder="Masukkan batch"
-                />
+                <label className="block text-xs font-medium text-text-primary mb-1">Batch</label>
+                <input type="text" value={newProductForm.batch} onChange={(e) => setNewProductForm({ ...newProductForm, batch: e.target.value })}
+                  className="w-full px-3 py-2.5 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-sm" placeholder="Masukkan batch" />
               </div>
+
+              {/* Qty */}
               <div>
-                <label className="block text-sm font-medium text-text-primary mb-1">
-                  Quantity
-                </label>
-                <QtyInput
-                  value={newProductForm.qty}
-                  onChange={(v) => setNewProductForm((prev) => ({ ...prev, qty: v }))}
-                  onExprCommit={(expr) => setNewProductFormula(expr)}
-                  wide
-                />
+                <label className="block text-xs font-medium text-text-primary mb-1">Quantity</label>
+                <QtyInput value={newProductForm.qty} onChange={(v) => setNewProductForm((prev) => ({ ...prev, qty: v }))} onExprCommit={(expr) => setNewProductFormula(expr)} wide />
               </div>
-              <button
-                onClick={handleAddNewProduct}
-                className="w-full bg-primary text-white py-2 rounded-lg font-semibold hover:bg-primary-light transition"
-              >
+
+              <button onClick={handleAddNewProduct}
+                className="w-full bg-primary text-white py-3 rounded-xl font-semibold hover:bg-primary-light transition text-sm active:scale-[0.98]">
                 Tambahkan Produk
               </button>
 
@@ -593,18 +564,10 @@ function InputPageContent() {
                 <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
                   <div className="bg-white w-full max-w-md rounded-2xl p-4 shadow-2xl">
                     <div className="flex items-center justify-between mb-3">
-                      <h3 className="font-semibold text-text-primary">Scan Barcode Produk</h3>
-                      <button
-                        onClick={() => setShowBarcodeScanner(false)}
-                        className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-500"
-                      >
-                        ✕
-                      </button>
+                      <h3 className="font-semibold text-text-primary text-sm">Scan Barcode Produk</h3>
+                      <button onClick={() => setShowBarcodeScanner(false)} className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-500">✕</button>
                     </div>
-                    <BarcodeScanner
-                      onScan={(code) => handleBarcodeScan(code)}
-                      active={showBarcodeScanner}
-                    />
+                    <BarcodeScanner onScan={(code) => handleBarcodeScan(code)} active={showBarcodeScanner} />
                   </div>
                 </div>
               )}
@@ -612,107 +575,102 @@ function InputPageContent() {
           </div>
         )}
 
+        {/* ── Product Table ── */}
         {allProducts.length > 0 && (
-        <div className="mb-4 bg-white rounded-lg shadow-md overflow-hidden">
-          <p className="text-[10px] text-text-secondary px-2 py-1 bg-gray-50 border-b border-border">💡 Qty bisa pakai rumus: 10+5, 400-100, 10x10+5</p>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-gray-50 border-b border-border">
-                  <th className="text-left px-2 py-1.5 font-semibold text-text-secondary whitespace-nowrap">Produk</th>
-                  <th className="text-left px-2 py-1.5 font-semibold text-text-secondary whitespace-nowrap">SKU</th>
-                  <th className="text-left px-2 py-1.5 font-semibold text-text-secondary whitespace-nowrap">Batch</th>
-                  <th className="text-center px-2 py-1.5 font-semibold text-text-secondary whitespace-nowrap">Qty</th>
-                  <th className="px-1 py-1.5"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {products.map((product) => (
-                  <tr key={`${product.sku}-${product.batch}`} className="hover:bg-gray-50">
-                    <td className="px-2 py-1.5 text-text-primary font-medium">
-                      <span className="break-words text-[11px] leading-tight">{product.productName}</span>
-                    </td>
-                    <td className="px-2 py-1.5 text-text-secondary whitespace-nowrap">{product.sku}</td>
-                    <td className="px-2 py-1.5 text-text-secondary whitespace-nowrap">
-                      {editingBatchKey === `existing-${product.sku}` ? (
-                        <span className="flex items-center gap-1">
-                          <input
-                            type="text"
-                            value={editingBatchValue}
-                            onChange={(e) => setEditingBatchValue(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === 'Enter') handleBatchSave(product.sku, false); if (e.key === 'Escape') setEditingBatchKey(null); }}
-                            className="w-16 px-1 py-0.5 border border-primary rounded text-xs"
-                            autoFocus
-                          />
-                          <button onClick={() => handleBatchSave(product.sku, false)} className="text-green-600 hover:text-green-800 text-xs" title="Simpan">✓</button>
-                          <button onClick={() => setEditingBatchKey(null)} className="text-red-500 hover:text-red-700 text-xs" title="Batal">✕</button>
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-1">
-                          <span>{product.batch}</span>
-                          <button onClick={() => handleBatchEdit(`existing-${product.sku}`, product.batch)} className="text-gray-400 hover:text-primary text-[10px]" title="Edit Batch">✏️</button>
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-1 py-1 text-center">
-                      <QtyInput wide value={quantities[product.sku] || 0} onChange={(v) => handleQuantityChange(product.sku, v)} onExprCommit={(expr) => handleExprCommit(product.sku, expr)} />
-                    </td>
-                    <td className="px-1 py-1 text-center">
-                      <button onClick={() => handleDeleteProduct(product.sku)} className="w-5 h-5 rounded-full bg-red-100 text-red-600 hover:bg-red-500 hover:text-white text-[10px] font-bold transition" title="Hapus">✕</button>
-                    </td>
+          <div className="mb-4 bg-white rounded-2xl shadow-card overflow-hidden">
+            <p className="text-[10px] text-text-secondary px-3 py-1.5 bg-gray-50 border-b border-border flex items-center gap-1">
+              <svg className="w-3 h-3 text-accent-yellow" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L1 21h22L12 2zm0 4l7.53 13H4.47L12 6z" /><path d="M11 10h2v5h-2zm0 6h2v2h-2z" /></svg>
+              Qty bisa pakai rumus: 10+5, 400-100, 10x10+5
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-primary text-white">
+                    <th className="text-left px-3 py-2.5 font-semibold whitespace-nowrap">Produk</th>
+                    <th className="text-left px-2 py-2.5 font-semibold whitespace-nowrap">SKU</th>
+                    <th className="text-left px-2 py-2.5 font-semibold whitespace-nowrap">Batch</th>
+                    <th className="text-center px-2 py-2.5 font-semibold whitespace-nowrap">Qty</th>
+                    <th className="px-1 py-2.5"></th>
                   </tr>
-                ))}
-                {newProducts.length > 0 && (
-                  <tr className="bg-primary-pale">
-                    <td colSpan={5} className="px-2 py-1 text-xs font-semibold text-primary">Produk Baru</td>
-                  </tr>
-                )}
-                {newProducts.map((product) => (
-                  <tr key={`new-${product.sku}-${product.batch}`} className="hover:bg-gray-50 bg-blue-50/30">
-                    <td className="px-2 py-1.5 text-text-primary font-medium">
-                      <span className="break-words text-[11px] leading-tight">{product.productName}</span>
-                    </td>
-                    <td className="px-2 py-1.5 text-text-secondary whitespace-nowrap">{product.sku}</td>
-                    <td className="px-2 py-1.5 text-text-secondary whitespace-nowrap">
-                      {editingBatchKey === `new-${product.sku}` ? (
-                        <span className="flex items-center gap-1">
-                          <input
-                            type="text"
-                            value={editingBatchValue}
-                            onChange={(e) => setEditingBatchValue(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === 'Enter') handleBatchSave(product.sku, true); if (e.key === 'Escape') setEditingBatchKey(null); }}
-                            className="w-16 px-1 py-0.5 border border-primary rounded text-xs"
-                            autoFocus
-                          />
-                          <button onClick={() => handleBatchSave(product.sku, true)} className="text-green-600 hover:text-green-800 text-xs" title="Simpan">✓</button>
-                          <button onClick={() => setEditingBatchKey(null)} className="text-red-500 hover:text-red-700 text-xs" title="Batal">✕</button>
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-1">
-                          <span>{product.batch}</span>
-                          <button onClick={() => handleBatchEdit(`new-${product.sku}`, product.batch)} className="text-gray-400 hover:text-primary text-[10px]" title="Edit Batch">✏️</button>
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-1 py-1 text-center">
-                      <QtyInput wide value={quantities[product.sku] || 0} onChange={(v) => handleQuantityChange(product.sku, v)} onExprCommit={(expr) => handleExprCommit(product.sku, expr)} />
-                    </td>
-                    <td className="px-1 py-1 text-center">
-                      <button onClick={() => handleDeleteNewProduct(product.sku)} className="w-5 h-5 rounded-full bg-red-100 text-red-600 hover:bg-red-500 hover:text-white text-[10px] font-bold transition" title="Hapus">✕</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {products.map((product, idx) => (
+                    <tr key={`${product.sku}-${product.batch}`} className={`hover:bg-primary-pale/50 transition ${idx % 2 === 1 ? "bg-gray-50/50" : "bg-white"}`}>
+                      <td className="px-3 py-2 text-text-primary font-medium">
+                        <span className="break-words text-[11px] leading-tight">{product.productName}</span>
+                      </td>
+                      <td className="px-2 py-2 text-text-secondary whitespace-nowrap text-[11px]">{product.sku}</td>
+                      <td className="px-2 py-2 text-text-secondary whitespace-nowrap">
+                        {editingBatchKey === `existing-${product.sku}` ? (
+                          <span className="flex items-center gap-1">
+                            <input type="text" value={editingBatchValue} onChange={(e) => setEditingBatchValue(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') handleBatchSave(product.sku, false); if (e.key === 'Escape') setEditingBatchKey(null); }}
+                              className="w-16 px-1.5 py-0.5 border border-primary rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary" autoFocus />
+                            <button onClick={() => handleBatchSave(product.sku, false)} className="text-primary hover:text-primary-dark text-xs" title="Simpan">✓</button>
+                            <button onClick={() => setEditingBatchKey(null)} className="text-accent-red hover:text-red-700 text-xs" title="Batal">✕</button>
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 group cursor-pointer" onClick={() => handleBatchEdit(`existing-${product.sku}`, product.batch)}>
+                            <span className="text-[11px]">{product.batch}</span>
+                            <span className="text-[10px] text-text-secondary opacity-0 group-hover:opacity-100 transition">✏️</span>
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-1 py-1 text-center">
+                        <QtyInput wide value={quantities[product.sku] || 0} onChange={(v) => handleQuantityChange(product.sku, v)} onExprCommit={(expr) => handleExprCommit(product.sku, expr)} />
+                      </td>
+                      <td className="px-1 py-1 text-center">
+                        <button onClick={() => handleDeleteProduct(product.sku)} className="w-6 h-6 rounded-full bg-red-50 text-accent-red hover:bg-accent-red hover:text-white text-[10px] font-bold transition" title="Hapus">✕</button>
+                      </td>
+                    </tr>
+                  ))}
+                  {newProducts.length > 0 && (
+                    <tr className="bg-primary/5">
+                      <td colSpan={5} className="px-3 py-1.5 text-xs font-semibold text-primary">Produk Baru</td>
+                    </tr>
+                  )}
+                  {newProducts.map((product, idx) => (
+                    <tr key={`new-${product.sku}-${product.batch}`} className={`hover:bg-primary-pale/50 transition ${idx % 2 === 1 ? "bg-blue-50/30" : "bg-primary-pale/20"}`}>
+                      <td className="px-3 py-2 text-text-primary font-medium">
+                        <span className="break-words text-[11px] leading-tight">{product.productName}</span>
+                      </td>
+                      <td className="px-2 py-2 text-text-secondary whitespace-nowrap text-[11px]">{product.sku}</td>
+                      <td className="px-2 py-2 text-text-secondary whitespace-nowrap">
+                        {editingBatchKey === `new-${product.sku}` ? (
+                          <span className="flex items-center gap-1">
+                            <input type="text" value={editingBatchValue} onChange={(e) => setEditingBatchValue(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') handleBatchSave(product.sku, true); if (e.key === 'Escape') setEditingBatchKey(null); }}
+                              className="w-16 px-1.5 py-0.5 border border-primary rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary" autoFocus />
+                            <button onClick={() => handleBatchSave(product.sku, true)} className="text-primary hover:text-primary-dark text-xs" title="Simpan">✓</button>
+                            <button onClick={() => setEditingBatchKey(null)} className="text-accent-red hover:text-red-700 text-xs" title="Batal">✕</button>
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 group cursor-pointer" onClick={() => handleBatchEdit(`new-${product.sku}`, product.batch)}>
+                            <span className="text-[11px]">{product.batch}</span>
+                            <span className="text-[10px] text-text-secondary opacity-0 group-hover:opacity-100 transition">✏️</span>
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-1 py-1 text-center">
+                        <QtyInput wide value={quantities[product.sku] || 0} onChange={(v) => handleQuantityChange(product.sku, v)} onExprCommit={(expr) => handleExprCommit(product.sku, expr)} />
+                      </td>
+                      <td className="px-1 py-1 text-center">
+                        <button onClick={() => handleDeleteNewProduct(product.sku)} className="w-6 h-6 rounded-full bg-red-50 text-accent-red hover:bg-accent-red hover:text-white text-[10px] font-bold transition" title="Hapus">✕</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
         )}
 
-        <div className="fixed bottom-20 left-0 right-0 p-4 bg-white border-t border-border">
+        {/* ── Save Button (Fixed) ── */}
+        <div className="fixed bottom-20 left-0 right-0 p-4 bg-white/95 backdrop-blur border-t border-border">
           <button
             onClick={handleSave}
             disabled={saving || totalItems === 0}
-            className="w-full bg-primary text-white py-3 rounded-lg font-semibold hover:bg-primary-light transition disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-primary text-white py-3.5 rounded-2xl font-semibold hover:bg-primary-light transition disabled:opacity-50 disabled:cursor-not-allowed shadow-card active:scale-[0.98]"
           >
             {saving ? <LoadingSpinner /> : `Simpan (${totalItems} item)`}
           </button>

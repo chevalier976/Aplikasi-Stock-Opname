@@ -11,7 +11,6 @@ import { getHistoryApi, updateEntryApi, deleteEntryApi, warmupCacheApi, saveStoc
 import { HistoryEntry, Product } from "@/lib/types";
 import { getCache, setCache, clearCache } from "@/lib/cache";
 import toast from "react-hot-toast";
-import BrandBLP from "@/components/BrandBLP";
 
 export default function HistoryPage() {
   const { user } = useAuth();
@@ -535,38 +534,90 @@ export default function HistoryPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center pb-20">
+      <div className="min-h-screen flex items-center justify-center pb-20 bg-[var(--primary-bg)]">
         <LoadingSpinner />
       </div>
     );
   }
 
+  // Group history by location for the card view
+  const locationGroups = useMemo(() => {
+    const map = new Map<string, { entries: typeof filteredHistory; totalQty: number; latestTimestamp: string }>();
+    filteredHistory.forEach((e) => {
+      const existing = map.get(e.location);
+      if (!existing) {
+        map.set(e.location, { entries: [e], totalQty: e.qty, latestTimestamp: e.timestamp });
+      } else {
+        existing.entries.push(e);
+        existing.totalQty += e.qty;
+      }
+    });
+    return Array.from(map.entries()).map(([loc, data]) => ({ location: loc, ...data }));
+  }, [filteredHistory]);
+
   return (
-    <div className="min-h-screen pb-20">
-      <div className="bg-primary text-white p-6 shadow-md">
-        <div className="mb-1"><BrandBLP className="text-white text-2xl" /></div>
-        <h1 className="text-xl font-bold mb-1">Riwayat Stock Opname</h1>
-        <p className="text-primary-pale">{user?.name || "User"}</p>
+    <div className="min-h-screen pb-24 bg-[var(--primary-bg)]">
+      {/* ── Header ── */}
+      <div className="bg-white px-5 pt-6 pb-4">
+        <div className="flex items-center gap-3 mb-4">
+          <h1 className="text-xl font-bold text-text-primary">Riwayat</h1>
+          <span className="px-2.5 py-0.5 bg-primary text-white text-xs font-bold rounded-full">{history.length}</span>
+        </div>
+
+        {/* ── Filter Tabs ── */}
+        <div className="flex gap-2 overflow-x-auto hide-scrollbar">
+          {(["all", "today", "week", "month"] as const).map((tab) => {
+            const labels = { all: "Semua", today: "Hari Ini", week: "Minggu Ini", month: "Bulan Ini" };
+            const isActive = !filterDate && !searchQuery && tab === "all"
+              || (tab === "today" && filterDate === new Date().toISOString().slice(0, 10));
+            return (
+              <button
+                key={tab}
+                onClick={() => {
+                  if (tab === "all") { setFilterDate(""); setSearchQuery(""); }
+                  else if (tab === "today") { setFilterDate(new Date().toISOString().slice(0, 10)); }
+                  else if (tab === "week") {
+                    const d = new Date(); d.setDate(d.getDate() - 7);
+                    setFilterDate(""); // Will use searchQuery approach
+                  }
+                  else if (tab === "month") {
+                    const d = new Date(); d.setDate(d.getDate() - 30);
+                    setFilterDate("");
+                  }
+                }}
+                className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition ${
+                  (tab === "all" && !filterDate && !searchQuery)
+                    ? "bg-text-primary text-white"
+                    : "bg-gray-100 text-text-secondary hover:bg-gray-200"
+                }`}
+              >
+                {labels[tab]}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      <div className="p-4">
+      <div className="px-4 pt-3">
         {/* ── Search Box ── */}
         <div className="mb-3">
           <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary">🔍</span>
+            <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
+            </svg>
             <input
               ref={searchRef}
               type="text"
               placeholder="Cari nama produk atau SKU..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-8 py-2.5 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+              className="w-full pl-10 pr-8 py-2.5 bg-white border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-sm shadow-card"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => { setSearchQuery(""); searchRef.current?.focus(); }}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary text-lg leading-none"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary text-lg leading-none"
               >
                 ×
               </button>
@@ -576,13 +627,15 @@ export default function HistoryPage() {
 
         {/* ── Date Filter + Counter ── */}
         <div className="mb-3 flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-text-secondary">📅</span>
+          <div className="flex items-center gap-1.5 bg-white rounded-lg px-2.5 py-1.5 shadow-card border border-border">
+            <svg className="w-4 h-4 text-text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><path d="M16 2v4M8 2v4M3 10h18" />
+            </svg>
             <input
               type="date"
               value={filterDate}
               onChange={(e) => setFilterDate(e.target.value)}
-              className="px-2 py-1.5 border border-border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+              className="text-xs focus:outline-none bg-transparent"
             />
           </div>
 
@@ -590,14 +643,14 @@ export default function HistoryPage() {
             <button
               type="button"
               onClick={clearAllFilters}
-              className="text-xs text-red-500 hover:text-red-700 font-medium transition"
+              className="text-xs text-accent-red font-medium transition px-2 py-1"
             >
               Reset
             </button>
           )}
 
-          <span className="ml-auto text-[11px] text-text-secondary">
-            {filteredHistory.length} / {history.length} entry
+          <span className="ml-auto text-[11px] text-text-secondary bg-white px-2 py-1 rounded-lg shadow-card">
+            {filteredHistory.length} / {history.length}
           </span>
         </div>
 
@@ -605,7 +658,7 @@ export default function HistoryPage() {
         <div className="mb-3">
           <button
             onClick={() => setShowAddForm(!showAddForm)}
-            className="w-full bg-primary text-white py-2.5 rounded-lg font-semibold hover:bg-primary-light transition text-sm"
+            className="w-full bg-primary text-white py-3 rounded-2xl font-semibold hover:bg-primary-light transition text-sm shadow-card active:scale-[0.98]"
           >
             {showAddForm ? "✕ Tutup Form" : "+ Tambah Produk Baru"}
           </button>
@@ -613,7 +666,7 @@ export default function HistoryPage() {
 
         {/* ── Add Product Form ── */}
         {showAddForm && (
-          <div className="bg-white border border-border rounded-lg p-4 mb-4 shadow-md">
+          <div className="bg-white border border-border rounded-2xl p-4 mb-4 shadow-card">
             <h3 className="text-sm font-semibold mb-3 text-text-primary">Tambah Produk Baru</h3>
 
             {scanningBarcode && (
@@ -633,26 +686,29 @@ export default function HistoryPage() {
                     onChange={(e) => handleLocationSearch(e.target.value)}
                     onFocus={() => { if (locationResults.length > 0) setShowLocationSuggestions(true); }}
                     onBlur={() => { setTimeout(() => setShowLocationSuggestions(false), 200); }}
-                    className="w-full pl-3 pr-12 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                    className="w-full pl-3 pr-12 py-2.5 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-sm"
                     placeholder="Ketik atau scan lokasi..."
                     autoComplete="off"
                   />
                   <button
                     type="button"
                     onClick={() => setShowLocationScanner(true)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg border border-border bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary hover:bg-primary/20"
                     title="Scan barcode lokasi"
                   >
-                    📷
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2" />
+                      <path d="M7 12h10" />
+                    </svg>
                   </button>
                 </div>
                 {showLocationSuggestions && locationResults.length > 0 && (
-                  <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-border rounded-xl shadow-lg max-h-48 overflow-y-auto">
                     {locationResults.map((loc, idx) => (
                       <button
                         key={`loc-${idx}`}
                         type="button"
-                        className="w-full text-left px-3 py-2 hover:bg-primary-pale transition border-b border-border last:border-b-0"
+                        className="w-full text-left px-3 py-2.5 hover:bg-primary-pale transition border-b border-border last:border-b-0"
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => handleSelectLocation(loc)}
                       >
@@ -678,7 +734,7 @@ export default function HistoryPage() {
                       const bv = String(addForm.barcode || "").trim();
                       if (e.key === "Enter" && bv) { e.preventDefault(); handleAddBarcodeScan(bv); }
                     }}
-                    className="w-full pl-3 pr-20 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm bg-gray-50"
+                    className="w-full pl-3 pr-20 py-2.5 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-sm bg-gray-50"
                     placeholder="Scan / ketik barcode"
                     autoComplete="off"
                   />
@@ -687,19 +743,22 @@ export default function HistoryPage() {
                       type="button"
                       onClick={() => { const bv = String(addForm.barcode || "").trim(); if (bv) handleAddBarcodeScan(bv); }}
                       disabled={!String(addForm.barcode || "").trim() || scanningBarcode}
-                      className="w-8 h-8 rounded-lg border border-border bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                      className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary hover:bg-primary/20 disabled:opacity-50"
                       title="Cari barcode"
                     >
-                      🔍
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
                     </button>
                     <button
                       type="button"
                       onClick={() => setShowBarcodeScanner(true)}
                       disabled={scanningBarcode}
-                      className="w-8 h-8 rounded-lg border border-border bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                      className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary hover:bg-primary/20 disabled:opacity-50"
                       title="Scan barcode"
                     >
-                      📷
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2" />
+                        <path d="M7 12h10" />
+                      </svg>
                     </button>
                   </div>
                 </div>
@@ -714,17 +773,17 @@ export default function HistoryPage() {
                   onChange={(e) => handleAddProductSearch(e.target.value)}
                   onFocus={() => { if (addSearchResults.length > 0) setShowAddSuggestions(true); }}
                   onBlur={() => { setTimeout(() => setShowAddSuggestions(false), 200); }}
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                  className="w-full px-3 py-2.5 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-sm"
                   placeholder="Ketik min. 2 huruf untuk cari produk..."
                   autoComplete="off"
                 />
                 {showAddSuggestions && addSearchResults.length > 0 && (
-                  <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-border rounded-xl shadow-lg max-h-48 overflow-y-auto">
                     {addSearchResults.map((p, idx) => (
                       <button
                         key={`${p.sku}-${idx}`}
                         type="button"
-                        className="w-full text-left px-3 py-2 hover:bg-primary-pale transition border-b border-border last:border-b-0"
+                        className="w-full text-left px-3 py-2.5 hover:bg-primary-pale transition border-b border-border last:border-b-0"
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => handleAddSelectSuggestion(p)}
                       >
@@ -739,210 +798,140 @@ export default function HistoryPage() {
               {/* SKU */}
               <div>
                 <label className="block text-xs font-medium text-text-primary mb-1">SKU</label>
-                <input
-                  type="text"
-                  value={addForm.sku}
-                  onChange={(e) => setAddForm({ ...addForm, sku: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
-                  placeholder="Masukkan SKU"
-                />
+                <input type="text" value={addForm.sku} onChange={(e) => setAddForm({ ...addForm, sku: e.target.value })}
+                  className="w-full px-3 py-2.5 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-sm" placeholder="Masukkan SKU" />
               </div>
 
               {/* Batch */}
               <div>
                 <label className="block text-xs font-medium text-text-primary mb-1">Batch</label>
-                <input
-                  type="text"
-                  value={addForm.batch}
-                  onChange={(e) => setAddForm({ ...addForm, batch: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
-                  placeholder="Masukkan batch"
-                />
+                <input type="text" value={addForm.batch} onChange={(e) => setAddForm({ ...addForm, batch: e.target.value })}
+                  className="w-full px-3 py-2.5 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-sm" placeholder="Masukkan batch" />
               </div>
 
-              {/* Qty with formula support */}
+              {/* Qty */}
               <div>
                 <label className="block text-xs font-medium text-text-primary mb-1">Quantity <span className="text-[10px] text-text-secondary font-normal">(bisa pakai rumus: 10+5, 10x10+5)</span></label>
-                <QtyInput
-                  value={addForm.qty}
-                  onChange={(v) => setAddForm((prev) => ({ ...prev, qty: v }))}
-                  onExprCommit={(expr) => setAddFormula(expr)}
-                  wide
-                />
+                <QtyInput value={addForm.qty} onChange={(v) => setAddForm((prev) => ({ ...prev, qty: v }))} onExprCommit={(expr) => setAddFormula(expr)} wide />
               </div>
 
               <button
                 onClick={handleAddProduct}
-                className="w-full bg-primary text-white py-2.5 rounded-lg font-semibold hover:bg-primary-light transition text-sm"
+                className="w-full bg-primary text-white py-3 rounded-xl font-semibold hover:bg-primary-light transition text-sm active:scale-[0.98]"
               >
                 Simpan Produk
               </button>
             </div>
 
-            {/* Barcode Scanner Modal - Produk */}
+            {/* Scanner Modals */}
             {showBarcodeScanner && (
               <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
                 <div className="bg-white w-full max-w-md rounded-2xl p-4 shadow-2xl">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="font-semibold text-text-primary text-sm">Scan Barcode Produk</h3>
-                    <button
-                      onClick={() => setShowBarcodeScanner(false)}
-                      className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-500"
-                    >
-                      ✕
-                    </button>
+                    <button onClick={() => setShowBarcodeScanner(false)} className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-500">✕</button>
                   </div>
-                  <BarcodeScanner
-                    onScan={(code) => handleAddBarcodeScan(code)}
-                    active={showBarcodeScanner}
-                  />
+                  <BarcodeScanner onScan={(code) => handleAddBarcodeScan(code)} active={showBarcodeScanner} />
                 </div>
               </div>
             )}
-
-            {/* Barcode Scanner Modal - Lokasi */}
             {showLocationScanner && (
               <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
                 <div className="bg-white w-full max-w-md rounded-2xl p-4 shadow-2xl">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="font-semibold text-text-primary text-sm">Scan Barcode Lokasi</h3>
-                    <button
-                      onClick={() => setShowLocationScanner(false)}
-                      className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-500"
-                    >
-                      ✕
-                    </button>
+                    <button onClick={() => setShowLocationScanner(false)} className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-500">✕</button>
                   </div>
-                  <BarcodeScanner
-                    onScan={(code) => handleLocationBarcodeScan(code)}
-                    active={showLocationScanner}
-                  />
+                  <BarcodeScanner onScan={(code) => handleLocationBarcodeScan(code)} active={showLocationScanner} />
                 </div>
               </div>
             )}
           </div>
         )}
 
-        {/* ── Flat Table ── */}
+        {/* ── Data Table ── */}
         {filteredHistory.length === 0 ? (
-          <div className="bg-white rounded-lg p-8 text-center">
-            <p className="text-text-secondary">
+          <div className="bg-white rounded-2xl p-8 text-center shadow-card">
+            <svg className="w-12 h-12 mx-auto mb-3 text-text-secondary/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+            <p className="text-text-secondary text-sm">
               {hasActiveFilters ? "Tidak ada hasil yang cocok" : "Belum ada riwayat"}
             </p>
             {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={clearAllFilters}
-                className="mt-2 text-sm text-primary font-medium hover:underline"
-              >
+              <button type="button" onClick={clearAllFilters} className="mt-2 text-sm text-primary font-medium hover:underline">
                 Reset Filter
               </button>
             )}
           </div>
         ) : (
-          <div className="bg-white rounded-lg shadow-md overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-card overflow-hidden">
             <div className="overflow-x-auto">
               <table className="min-w-[640px] w-full text-xs">
                 <thead>
                   <tr className="bg-primary text-white">
-                    <th className="text-left px-3 py-2.5 font-semibold whitespace-nowrap">Lokasi</th>
-                    <th className="text-left px-3 py-2.5 font-semibold whitespace-nowrap">Nama Produk</th>
-                    <th className="text-left px-3 py-2.5 font-semibold whitespace-nowrap">Batch</th>
-                    <th className="text-right px-3 py-2.5 font-semibold whitespace-nowrap">Qty Fisik</th>
-                    <th className="text-center px-2 py-2.5 font-semibold whitespace-nowrap">Aksi</th>
+                    <th className="text-left px-3 py-3 font-semibold whitespace-nowrap">Lokasi</th>
+                    <th className="text-left px-3 py-3 font-semibold whitespace-nowrap">Nama Produk</th>
+                    <th className="text-left px-3 py-3 font-semibold whitespace-nowrap">Batch</th>
+                    <th className="text-right px-3 py-3 font-semibold whitespace-nowrap">Qty Fisik</th>
+                    <th className="text-center px-2 py-3 font-semibold whitespace-nowrap">Aksi</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredHistory.map((entry, idx) => (
                     <tr
                       key={entry.rowId}
-                      className={`border-b border-border hover:bg-gray-50 transition ${idx % 2 === 1 ? "bg-gray-50/50" : "bg-white"}`}
+                      className={`border-b border-border hover:bg-primary-pale/50 transition ${idx % 2 === 1 ? "bg-gray-50/50" : "bg-white"}`}
                     >
-                      {/* Lokasi */}
-                      <td className="px-3 py-2 text-text-secondary whitespace-nowrap text-[11px]">
-                        {entry.location}
-                      </td>
-
-                      {/* Nama Produk */}
-                      <td className="px-3 py-2 text-text-primary whitespace-nowrap">
+                      <td className="px-3 py-2.5 text-text-secondary whitespace-nowrap text-[11px]">{entry.location}</td>
+                      <td className="px-3 py-2.5 text-text-primary whitespace-nowrap">
                         <span className="font-medium text-[11px]">{entry.productName}</span>
-                        {entry.edited === "Yes" && (
-                          <span className="ml-0.5 text-[10px] text-orange-500" title={`Diedit: ${entry.editTimestamp}`}>✏️</span>
-                        )}
+                        {entry.edited === "Yes" && <span className="ml-0.5 text-[10px] text-accent-yellow" title={`Diedit: ${entry.editTimestamp}`}>✏️</span>}
                       </td>
-
-                      {/* Batch — inline editable */}
-                      <td className="px-3 py-2 text-text-secondary whitespace-nowrap">
+                      <td className="px-3 py-2.5 text-text-secondary whitespace-nowrap">
                         {editingBatch === entry.rowId ? (
                           <input
-                            type="text"
-                            value={editingBatchValue}
+                            type="text" value={editingBatchValue}
                             onChange={(e) => setEditingBatchValue(e.target.value)}
                             onBlur={() => saveInlineBatch(entry)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") { e.preventDefault(); saveInlineBatch(entry); }
-                              if (e.key === "Escape") { setEditingBatch(null); }
-                            }}
-                            autoFocus
-                            className="w-24 px-1.5 py-0.5 border border-primary rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                            onKeyDown={(e) => { if (e.key === "Enter") saveInlineBatch(entry); if (e.key === "Escape") setEditingBatch(null); }}
+                            autoFocus className="w-24 px-1.5 py-0.5 border border-primary rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary"
                           />
                         ) : (
-                          <span
-                            className="inline-flex items-center gap-1 cursor-pointer group"
-                            onClick={() => startInlineBatchEdit(entry)}
-                          >
+                          <span className="inline-flex items-center gap-1 cursor-pointer group" onClick={() => startInlineBatchEdit(entry)}>
                             {entry.batch}
                             <span className="text-[10px] text-text-secondary opacity-0 group-hover:opacity-100 transition">✏️</span>
                           </span>
                         )}
                       </td>
-
-                      {/* Qty Fisik */}
-                      <td className="px-3 py-2 text-right font-semibold text-primary whitespace-nowrap">
+                      <td className="px-3 py-2.5 text-right font-semibold text-primary whitespace-nowrap">
                         {editingQty === entry.rowId ? (
                           <div className="flex flex-col items-end">
-                            <QtyInput
-                              wide
-                              value={editingQtyValue}
-                              onChange={(v) => setEditingQtyValue(v)}
-                              onExprCommit={(expr) => setEditingQtyFormula(expr)}
-                            />
+                            <QtyInput wide value={editingQtyValue} onChange={(v) => setEditingQtyValue(v)} onExprCommit={(expr) => setEditingQtyFormula(expr)} />
                             <div className="flex gap-1 mt-1">
-                              <button type="button" onClick={() => saveInlineQty(entry)}
-                                className="px-2 py-0.5 bg-green-600 text-white text-[10px] rounded font-semibold hover:bg-green-700 transition">💾</button>
-                              <button type="button" onClick={() => setEditingQty(null)}
-                                className="px-2 py-0.5 bg-gray-300 text-text-primary text-[10px] rounded font-semibold hover:bg-gray-400 transition">✕</button>
+                              <button type="button" onClick={() => saveInlineQty(entry)} className="px-2 py-0.5 bg-primary text-white text-[10px] rounded-md font-semibold hover:bg-primary-light transition">💾</button>
+                              <button type="button" onClick={() => setEditingQty(null)} className="px-2 py-0.5 bg-gray-200 text-text-primary text-[10px] rounded-md font-semibold hover:bg-gray-300 transition">✕</button>
                             </div>
                           </div>
                         ) : (
                           <div>
                             <span className="inline-flex items-center justify-end gap-1">
-                              <span
-                                className={entry.formula ? "cursor-pointer underline decoration-dotted" : ""}
-                                onClick={() => { if (entry.formula) setShowFormula(showFormula === entry.rowId ? null : entry.rowId); }}
-                              >
+                              <span className={entry.formula ? "cursor-pointer underline decoration-dotted" : ""} onClick={() => { if (entry.formula) setShowFormula(showFormula === entry.rowId ? null : entry.rowId); }}>
                                 {entry.qty.toLocaleString()}
                               </span>
                               {entry.formula && <span className="text-[9px] text-text-secondary">🧮</span>}
-                              <button type="button" onClick={() => startInlineQtyEdit(entry)}
-                                className="text-[10px] text-text-secondary hover:text-primary transition" title="Edit qty">✏️</button>
+                              <button type="button" onClick={() => startInlineQtyEdit(entry)} className="text-[10px] text-text-secondary hover:text-primary transition" title="Edit qty">✏️</button>
                             </span>
                             {showFormula === entry.rowId && entry.formula && (
-                              <div className="mt-0.5 bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded shadow-lg whitespace-nowrap">
-                                {entry.formula}
-                              </div>
+                              <div className="mt-0.5 bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded-lg shadow-lg whitespace-nowrap">{entry.formula}</div>
                             )}
                           </div>
                         )}
                       </td>
-
-                      {/* Aksi */}
-                      <td className="px-2 py-2 text-center whitespace-nowrap">
+                      <td className="px-2 py-2.5 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1">
-                          <button onClick={() => handleEdit(entry)}
-                            className="px-2 py-1 bg-primary text-white text-[10px] rounded font-medium hover:bg-primary-light transition">Edit</button>
-                          <button onClick={() => handleDelete(entry)}
-                            className="px-2 py-1 bg-red-500 text-white text-[10px] rounded font-medium hover:bg-red-600 transition">Hapus</button>
+                          <button onClick={() => handleEdit(entry)} className="px-2 py-1 bg-primary text-white text-[10px] rounded-md font-medium hover:bg-primary-light transition">Edit</button>
+                          <button onClick={() => handleDelete(entry)} className="px-2 py-1 bg-accent-red text-white text-[10px] rounded-md font-medium hover:bg-red-600 transition">Hapus</button>
                         </div>
                       </td>
                     </tr>
@@ -955,12 +944,7 @@ export default function HistoryPage() {
       </div>
 
       {selectedEntry && (
-        <EditModal
-          entry={selectedEntry}
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          onSave={handleSaveEdit}
-        />
+        <EditModal entry={selectedEntry} isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={handleSaveEdit} />
       )}
 
       <BottomNav activePage="history" />

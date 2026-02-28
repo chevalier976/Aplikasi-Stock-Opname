@@ -10,19 +10,27 @@ const config: Config = {
     extend: {
       colors: {
         primary: {
-          DEFAULT: "var(--primary)",      // #4a5d3e
-          light: "var(--primary-light)",  // #5c7a4a
-          pale: "var(--primary-pale)",    // #f5f7f3
-          bg: "var(--primary-bg)",        // #e8ece6
+          DEFAULT: "var(--primary)",
+          light: "var(--primary-light)",
+          dark: "var(--primary-dark)",
+          pale: "var(--primary-pale)",
+          bg: "var(--primary-bg)",
         },
-        error: "var(--error)",            // #d32f2f
+        accent: {
+          yellow: "var(--accent-yellow)",
+          red: "var(--accent-red)",
+        },
+        error: "var(--error)",
         warning: {
-          DEFAULT: "var(--warning)",      // #fff3cd
-          text: "var(--warning-text)",    // #856404
+          DEFAULT: "var(--warning)",
+          text: "var(--warning-text)",
         },
-        "text-primary": "var(--text-primary)",    // #333333
-        "text-secondary": "var(--text-secondary)", // #888888
-        border: "var(--border)",                   // #cccccc
+        "text-primary": "var(--text-primary)",
+        "text-secondary": "var(--text-secondary)",
+        border: "var(--border)",
+      },
+      boxShadow: {
+        card: "var(--card-shadow)",
       },
     },
   },

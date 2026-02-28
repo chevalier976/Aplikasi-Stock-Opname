@@ -6,7 +6,7 @@ import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import InstallPrompt from "@/components/InstallPrompt";
 
 export const viewport: Viewport = {
-  themeColor: "#4a5d3e",
+  themeColor: "#2BAE66",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -41,7 +41,7 @@ export default function RootLayout({
         <link rel="icon" type="image/png" href="/favicon.png" />
         <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
       </head>
-      <body className="font-sans bg-[var(--primary-bg)]" style={{ fontFamily: "'Inter', sans-serif" }}>
+      <body className="font-sans bg-[var(--primary-bg)] text-text-primary" style={{ fontFamily: "'Inter', sans-serif" }}>
         <AuthProvider>
           {children}
           <Toaster position="top-center" />

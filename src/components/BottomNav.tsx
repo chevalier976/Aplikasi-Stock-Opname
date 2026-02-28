@@ -6,89 +6,76 @@ import { useEffect } from "react";
 import { useAuth } from "./AuthProvider";
 
 interface BottomNavProps {
-  activePage: "scan" | "history";
+  activePage: "scan" | "history" | "profile";
 }
 
 export default function BottomNav({ activePage }: BottomNavProps) {
-  const { logout } = useAuth();
   const router = useRouter();
 
-  // Prefetch all routes on mount for instant tab switching
   useEffect(() => {
     router.prefetch("/scan");
     router.prefetch("/history");
+    router.prefetch("/profile");
   }, [router]);
 
+  const tabs = [
+    {
+      key: "scan" as const,
+      label: "Scan",
+      href: "/scan",
+      icon: (active: boolean) => (
+        <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? 2.5 : 2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+        </svg>
+      ),
+    },
+    {
+      key: "history" as const,
+      label: "Riwayat",
+      href: "/history",
+      icon: (active: boolean) => (
+        <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? 2.5 : 2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      ),
+    },
+    {
+      key: "profile" as const,
+      label: "Profil",
+      href: "/profile",
+      icon: (active: boolean) => (
+        <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? 2.5 : 2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+        </svg>
+      ),
+    },
+  ];
+
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-border shadow-lg">
-      <div className="flex justify-around items-center h-16">
-        <Link
-          href="/scan"
-          className={`flex flex-col items-center justify-center flex-1 h-full ${
-            activePage === "scan"
-              ? "text-primary border-t-2 border-primary"
-              : "text-text-secondary"
-          }`}
-        >
-          <svg
-            className="w-6 h-6 mb-1"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"
-            />
-          </svg>
-          <span className="text-xs">Scan</span>
-        </Link>
-
-        <Link
-          href="/history"
-          className={`flex flex-col items-center justify-center flex-1 h-full ${
-            activePage === "history"
-              ? "text-primary border-t-2 border-primary"
-              : "text-text-secondary"
-          }`}
-        >
-          <svg
-            className="w-6 h-6 mb-1"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
-          <span className="text-xs">Riwayat</span>
-        </Link>
-
-        <button
-          onClick={logout}
-          className="flex flex-col items-center justify-center flex-1 h-full text-text-secondary"
-        >
-          <svg
-            className="w-6 h-6 mb-1"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-            />
-          </svg>
-          <span className="text-xs">Logout</span>
-        </button>
+    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-border shadow-lg z-40">
+      <div className="flex justify-around items-center h-16 max-w-lg mx-auto">
+        {tabs.map((tab) => {
+          const isActive = activePage === tab.key;
+          return (
+            <Link
+              key={tab.key}
+              href={tab.href}
+              className={`flex flex-col items-center justify-center flex-1 h-full transition-colors ${
+                isActive
+                  ? "text-primary"
+                  : "text-text-secondary hover:text-text-primary"
+              }`}
+            >
+              <div className={`relative ${isActive ? "" : ""}`}>
+                {isActive && (
+                  <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-8 h-1 bg-primary rounded-full" />
+                )}
+                <div className="mt-1">{tab.icon(isActive)}</div>
+              </div>
+              <span className={`text-[10px] mt-0.5 ${isActive ? "font-semibold" : "font-medium"}`}>{tab.label}</span>
+            </Link>
+          );
+        })}
       </div>
     </nav>
   );
