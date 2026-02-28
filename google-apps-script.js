@@ -367,17 +367,23 @@ function syncMasterDataInternal(locationCode, items) {
   var data = sheet.getDataRange().getValues();
   var loc = normalizeLocation(locationCode);
 
+  // Track existing products by SKU + Batch combination (not just SKU)
   var existing = {};
   for (var i = 1; i < data.length; i++) {
-    if (normalizeLocation(data[i][0]) === loc) existing[normalizeText(data[i][2])] = true;
+    if (normalizeLocation(data[i][0]) === loc) {
+      var key = normalizeText(data[i][2]) + "||" + normalizeText(data[i][3]);
+      existing[key] = true;
+    }
   }
 
   var newRows = [];
   var seen = {};
   (items || []).forEach(function(item) {
     var sku = normalizeText(item.sku);
-    if (!sku || existing[sku] || seen[sku]) return;
-    seen[sku] = true;
+    var batch = normalizeText(item.batch || "");
+    var key = sku + "||" + batch;
+    if (!sku || existing[key] || seen[key]) return;
+    seen[key] = true;
     newRows.push([loc, item.productName || "", sku, item.batch || "", item.barcode || ""]);
   });
 
