@@ -404,6 +404,12 @@ function updateEntry(data) {
 
     for (var i = 1; i < values.length; i++) {
       if (values[i][1] === data.rowId) {
+        // Capture OLD values before updating (for Master Data sync)
+        var oldLocation = normalizeLocation(values[i][4]);
+        var oldProductName = normalizeText(values[i][5]);
+        var oldSku = normalizeText(values[i][6]);
+        var oldBatch = normalizeText(values[i][7]);
+
         var row = values[i].slice();
         if (data.productName !== undefined) row[5] = data.productName;
         if (data.sku !== undefined) row[6] = data.sku;
@@ -413,6 +419,28 @@ function updateEntry(data) {
         row[10] = formatTimestamp(data.editTimestamp);
         if (data.formula !== undefined) row[11] = data.formula || "";
         sheet.getRange(i + 1, 1, 1, row.length).setValues([row]);
+
+        // Sync changes to Master Data if productName, sku, or batch changed
+        var newProductName = normalizeText(data.productName !== undefined ? data.productName : oldProductName);
+        var newSku = normalizeText(data.sku !== undefined ? data.sku : oldSku);
+        var newBatch = normalizeText(data.batch !== undefined ? data.batch : oldBatch);
+
+        if (newProductName !== oldProductName || newSku !== oldSku || newBatch !== oldBatch) {
+          var mdSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Master Data");
+          var mdData = mdSheet.getDataRange().getValues();
+          for (var j = 1; j < mdData.length; j++) {
+            if (normalizeLocation(mdData[j][0]) === oldLocation &&
+                normalizeText(mdData[j][2]) === oldSku &&
+                normalizeText(mdData[j][3]) === oldBatch) {
+              // Update the Master Data row with new values
+              mdSheet.getRange(j + 1, 2).setValue(newProductName); // col B = Product Name
+              mdSheet.getRange(j + 1, 3).setValue(newSku);         // col C = SKU
+              mdSheet.getRange(j + 1, 4).setValue(newBatch);       // col D = Batch
+              break; // Only update exact match
+            }
+          }
+        }
+
         bumpCacheVersion();
         return { success: true, message: "Entry berhasil diupdate" };
       }
