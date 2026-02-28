@@ -108,7 +108,7 @@ function doPost(e) {
       case "saveStockOpname": result = saveStockOpname(data); break;
       case "getHistory":      result = getHistory(data.operator, data.filter); break;
       case "updateEntry":     result = updateEntry(data); break;
-      case "deleteProduct":   result = deleteProduct(data.locationCode, data.sku); break;
+      case "deleteProduct":   result = deleteProduct(data.locationCode, data.sku, data.batch); break;
       case "deleteEntry":     result = deleteEntry(data.rowId); break;
       case "lookupBarcode":   result = lookupBarcode(data.barcode); break;
       case "searchProducts":  result = searchProducts(data.query); break;
@@ -191,9 +191,11 @@ function searchProducts(query, preloadedData) {
   for (var i = 1; i < data.length; i++) {
     var name = String(data[i][1]).toLowerCase();
     var sku = String(data[i][2]);
-    if (name.indexOf(q) !== -1 && !seen[sku]) {
-      seen[sku] = true;
-      results.push({ productName: data[i][1], sku: data[i][2], batch: data[i][3], barcode: data[i][4] || "" });
+    var batch = String(data[i][3] || "");
+    var key = sku + "||" + batch;
+    if (name.indexOf(q) !== -1 && !seen[key]) {
+      seen[key] = true;
+      results.push({ productName: data[i][1], sku: data[i][2], batch: batch, barcode: data[i][4] || "" });
       if (results.length >= 10) break;
     }
   }
@@ -312,21 +314,23 @@ function warmupCache(payload) {
 // WRITE — uses lock, minimal hold time
 // ──────────────────────────────────────────────────────────────
 
-function deleteProduct(locationCode, sku) {
-  return withScriptLock(function() { return deleteProductInternal(locationCode, sku); });
+function deleteProduct(locationCode, sku, batch) {
+  return withScriptLock(function() { return deleteProductInternal(locationCode, sku, batch); });
 }
 
-function deleteProductInternal(locationCode, sku) {
+function deleteProductInternal(locationCode, sku, batch) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Master Data");
   var data = sheet.getDataRange().getValues();
   var tLoc = normalizeLocation(locationCode);
   var tSku = normalizeText(sku);
+  var tBatch = normalizeText(batch || "");
 
   var count = 0;
   for (var i = data.length - 1; i >= 1; i--) {
-    if (normalizeLocation(data[i][0]) === tLoc && normalizeText(data[i][2]) === tSku) {
+    if (normalizeLocation(data[i][0]) === tLoc && normalizeText(data[i][2]) === tSku && normalizeText(data[i][3]) === tBatch) {
       sheet.deleteRow(i + 1);
       count++;
+      break; // Only delete exact match (location + SKU + batch)
     }
   }
   if (count === 0) return { success: false, message: "Produk tidak ditemukan di lokasi tersebut" };
@@ -489,9 +493,11 @@ function getAllProducts() {
   var seen = {};
   for (var i = 1; i < data.length; i++) {
     var sku = normalizeText(data[i][2]);
-    if (sku && !seen[sku]) {
-      seen[sku] = true;
-      products.push({ productName: data[i][1], sku: sku, batch: data[i][3], barcode: data[i][4] || "" });
+    var batch = normalizeText(data[i][3] || "");
+    var key = sku + "||" + batch;
+    if (sku && !seen[key]) {
+      seen[key] = true;
+      products.push({ productName: data[i][1], sku: sku, batch: batch, barcode: data[i][4] || "" });
     }
   }
   var resp = { success: true, products: products };

@@ -197,11 +197,12 @@ export const updateEntryApi = async (
 
 export const deleteProductApi = async (
   locationCode: string,
-  sku: string
+  sku: string,
+  batch: string
 ): Promise<{ success: boolean; message?: string }> => {
   invalidateMemCache("getProducts");
   invalidateMemCache("getHistory");
-  return apiCall("deleteProduct", { locationCode, sku });
+  return apiCall("deleteProduct", { locationCode, sku, batch });
 };
 
 export const lookupBarcodeApi = async (

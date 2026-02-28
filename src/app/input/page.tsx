@@ -164,7 +164,7 @@ function InputPageContent() {
 
     // Background sync
     try {
-      const result = await deleteProductApi(location, sku);
+      const result = await deleteProductApi(location, sku, batch);
       if (!result.success) {
         setProducts(prevProducts);
         setNewProducts(prevNewProducts);
