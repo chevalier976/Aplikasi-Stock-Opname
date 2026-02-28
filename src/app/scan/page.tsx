@@ -92,12 +92,20 @@ export default function ScanPage() {
     if (user?.email) {
       const cachedHist = getCache<HistoryEntry[]>(`history:${user.email}:all`);
       if (cachedHist) setRecentHistory(cachedHist.data);
-      getHistoryApi(user.email).then((res) => {
-        if (res.success && res.history) {
-          setRecentHistory(res.history);
-          setCache(`history:${user.email}:all`, res.history);
-        }
-      }).catch(() => {});
+
+      // Check if we just saved — if so, delay API refresh to avoid overwriting optimistic data
+      const lastSave = Number(localStorage.getItem("lastSaveTs") || "0");
+      const sinceSave = Date.now() - lastSave;
+      const refreshDelay = sinceSave < 15_000 ? Math.max(15_000 - sinceSave, 0) : 0;
+
+      setTimeout(() => {
+        getHistoryApi(user!.email, undefined).then((res) => {
+          if (res.success && res.history) {
+            setRecentHistory(res.history);
+            setCache(`history:${user!.email}:all`, res.history);
+          }
+        }).catch(() => {});
+      }, refreshDelay);
     }
 
     warmupCacheApi().catch(() => {});

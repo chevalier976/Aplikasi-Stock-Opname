@@ -84,11 +84,19 @@ export default function HistoryPage() {
 
     const ck = `history:${user.email}:all`;
 
-    // Show cached data instantly
+    // Show cached data instantly (includes optimistic entries from save)
     const cached = getCache<HistoryEntry[]>(ck);
     if (cached) {
       setHistory(cached.data);
       setLoading(false);
+    }
+
+    // Check if we just saved — delay API refresh to avoid overwriting optimistic data
+    const lastSave = Number(localStorage.getItem("lastSaveTs") || "0");
+    const sinceSave = Date.now() - lastSave;
+    if (sinceSave < 15_000) {
+      // Wait until server has had time to process the save
+      await new Promise((r) => setTimeout(r, Math.max(15_000 - sinceSave, 0)));
     }
 
     // Background refresh

@@ -9,7 +9,7 @@ import BarcodeScanner from "@/components/BarcodeScanner";
 import QtyInput from "@/components/QtyInput";
 import { calcExpr } from "@/components/QtyInput";
 import { getProductsApi, saveStockOpnameApi, deleteProductApi, lookupBarcodeApi, searchProductsApi, warmupCacheApi, preloadHistory, getAllProductsApi, invalidateMemCache } from "@/lib/api";
-import { Product } from "@/lib/types";
+import { Product, HistoryEntry } from "@/lib/types";
 import { getCache, setCache, clearCache } from "@/lib/cache";
 import toast from "react-hot-toast";
 
@@ -373,15 +373,41 @@ function InputPageContent() {
     const sessionId = `${user?.email}_${Date.now()}`;
     const timestamp = new Date().toISOString();
 
-    // Fire save IMMEDIATELY in background — don't await
+    // ── Optimistic update: inject new entries into localStorage cache ──
+    // This makes scan terakhir & history show new data INSTANTLY
+    // instead of waiting for server round-trip (GAS cold start = 3-10s)
+    const historyCacheKey = `history:${user?.email}:all`;
+    const cachedHistory = getCache<HistoryEntry[]>(historyCacheKey);
+    const optimisticEntries: HistoryEntry[] = items.map((item, idx) => ({
+      sessionId,
+      rowId: `optimistic_${Date.now()}_${idx}`,
+      timestamp,
+      operator: user?.email || "",
+      location,
+      productName: item.productName,
+      sku: item.sku,
+      batch: item.batch,
+      qty: item.qty,
+      edited: "",
+      editTimestamp: "",
+      formula: item.formula || "",
+    }));
+    const updatedHistory = [...optimisticEntries, ...(cachedHistory?.data || [])];
+    setCache(historyCacheKey, updatedHistory);
+
+    // Fire save in background — don't await
     saveStockOpnameApi(sessionId, user?.email || "", location, timestamp, items)
       .then((result) => {
         if (!result.success) toast.error(result.message || "Gagal sinkron ke server");
       })
       .catch(() => toast.error("Gagal sinkron ke server"));
 
-    // Navigate immediately — don't wait for server
-    // Only invalidate memCache, keep localStorage cache for instant history display
+    // Mark save timestamp so other pages know not to overwrite optimistic data
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("lastSaveTs", String(Date.now()));
+    }
+
+    // Navigate immediately — memCache invalidated so background refresh gets real data
     invalidateMemCache("getHistory");
     clearCache("products:");
     toast.success("Stock opname berhasil disimpan!");
