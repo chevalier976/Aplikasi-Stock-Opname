@@ -137,7 +137,7 @@ function InputPageContent() {
     }));
   };
 
-  const handleDeleteProduct = async (sku: string) => {
+  const handleDeleteProduct = async (sku: string, batch: string) => {
     const confirmDelete = window.confirm(
       "Hapus produk ini dari lokasi? Data juga akan dihapus dari Master Data."
     );
@@ -148,19 +148,18 @@ function InputPageContent() {
     const prevNewProducts = [...newProducts];
     const prevQuantities = { ...quantities };
 
-    setProducts((prev) => prev.filter((p) => p.sku !== sku));
-    setNewProducts((prev) => prev.filter((p) => p.sku !== sku));
+    setProducts((prev) => prev.filter((p) => !(p.sku === sku && p.batch === batch)));
+    setNewProducts((prev) => prev.filter((p) => !(p.sku === sku && p.batch === batch)));
     setQuantities((prev) => {
       const copy = { ...prev };
-      // Delete all keys that start with this sku
-      Object.keys(copy).forEach((k) => { if (k.startsWith(sku + "__")) delete copy[k]; });
+      delete copy[productKey(sku, batch)];
       return copy;
     });
     toast.success("Produk berhasil dihapus");
 
     // Update product cache
     const ck = `products:${location}`;
-    setCache(ck, products.filter((p) => p.sku !== sku));
+    setCache(ck, products.filter((p) => !(p.sku === sku && p.batch === batch)));
     clearCache("history:"); // invalidate history cache
 
     // Background sync
@@ -183,11 +182,11 @@ function InputPageContent() {
     }
   };
 
-  const handleDeleteNewProduct = (sku: string) => {
-    setNewProducts((prev) => prev.filter((p) => p.sku !== sku));
+  const handleDeleteNewProduct = (sku: string, batch: string) => {
+    setNewProducts((prev) => prev.filter((p) => !(p.sku === sku && p.batch === batch)));
     setQuantities((prev) => {
       const copy = { ...prev };
-      Object.keys(copy).forEach((k) => { if (k.startsWith(sku + "__")) delete copy[k]; });
+      delete copy[productKey(sku, batch)];
       return copy;
     });
     toast.success("Produk baru dihapus dari daftar");
@@ -289,10 +288,10 @@ function InputPageContent() {
       return;
     }
 
-    // Check if SKU already exists
+    // Check if SKU + Batch already exists
     const allProducts = [...products, ...newProducts];
-    if (allProducts.some((p) => p.sku === newProductForm.sku)) {
-      toast.error("SKU sudah ada");
+    if (allProducts.some((p) => p.sku === newProductForm.sku && p.batch === newProductForm.batch)) {
+      toast.error("Produk dengan SKU dan Batch yang sama sudah ada");
       return;
     }
 
@@ -331,15 +330,35 @@ function InputPageContent() {
     setEditingBatchValue(currentBatch);
   };
 
-  const handleBatchSave = (sku: string, isNew: boolean) => {
+  const handleBatchSave = (sku: string, oldBatch: string, isNew: boolean) => {
     const newBatch = editingBatchValue.trim();
-    if (isNew) {
-      setNewProducts((prev) => prev.map((p) => p.sku === sku ? { ...p, batch: newBatch } : p));
-    } else {
-      setProducts((prev) => prev.map((p) => p.sku === sku ? { ...p, batch: newBatch } : p));
-    }
     setEditingBatchKey(null);
     setEditingBatchValue("");
+    if (newBatch === oldBatch) return; // no change
+
+    // Update the product's batch — match by BOTH sku and oldBatch
+    if (isNew) {
+      setNewProducts((prev) => prev.map((p) => p.sku === sku && p.batch === oldBatch ? { ...p, batch: newBatch } : p));
+    } else {
+      setProducts((prev) => prev.map((p) => p.sku === sku && p.batch === oldBatch ? { ...p, batch: newBatch } : p));
+    }
+
+    // Migrate qty/formula from old key to new key
+    const oldKey = productKey(sku, oldBatch);
+    const newKey = productKey(sku, newBatch);
+    if (oldKey !== newKey) {
+      setQuantities((prev) => {
+        const copy = { ...prev };
+        copy[newKey] = copy[oldKey] || 0;
+        delete copy[oldKey];
+        return copy;
+      });
+      setFormulas((prev) => {
+        const copy = { ...prev };
+        if (copy[oldKey]) { copy[newKey] = copy[oldKey]; delete copy[oldKey]; }
+        return copy;
+      });
+    }
     toast.success("Batch diperbarui");
   };
 
@@ -637,16 +656,16 @@ function InputPageContent() {
                         <span className="break-words text-[11px] leading-tight">{product.productName}</span>
                       </td>
                       <td className="px-2 py-2 text-text-secondary whitespace-nowrap">
-                        {editingBatchKey === `existing-${product.sku}` ? (
+                        {editingBatchKey === `existing-${product.sku}-${product.batch}` ? (
                           <span className="flex items-center gap-1">
                             <input type="text" value={editingBatchValue} onChange={(e) => setEditingBatchValue(e.target.value)}
-                              onKeyDown={(e) => { if (e.key === 'Enter') handleBatchSave(product.sku, false); if (e.key === 'Escape') setEditingBatchKey(null); }}
+                              onKeyDown={(e) => { if (e.key === 'Enter') handleBatchSave(product.sku, product.batch, false); if (e.key === 'Escape') setEditingBatchKey(null); }}
                               className="w-16 px-1.5 py-0.5 border border-primary rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary" autoFocus />
-                            <button onClick={() => handleBatchSave(product.sku, false)} className="text-primary hover:text-primary-dark text-xs" title="Simpan">✓</button>
+                            <button onClick={() => handleBatchSave(product.sku, product.batch, false)} className="text-primary hover:text-primary-dark text-xs" title="Simpan">✓</button>
                             <button onClick={() => setEditingBatchKey(null)} className="text-accent-red hover:text-red-700 text-xs" title="Batal">✕</button>
                           </span>
                         ) : (
-                          <span className="flex items-center gap-1 group cursor-pointer" onClick={() => handleBatchEdit(`existing-${product.sku}`, product.batch)}>
+                          <span className="flex items-center gap-1 group cursor-pointer" onClick={() => handleBatchEdit(`existing-${product.sku}-${product.batch}`, product.batch)}>
                             <span className="text-[11px]">{product.batch}</span>
                             <span className="text-[10px] text-text-secondary opacity-0 group-hover:opacity-100 transition">✏️</span>
                           </span>
@@ -656,7 +675,7 @@ function InputPageContent() {
                         <QtyInput wide value={quantities[productKey(product.sku, product.batch)] || 0} onChange={(v) => handleQuantityChange(productKey(product.sku, product.batch), v)} onExprCommit={(expr) => handleExprCommit(productKey(product.sku, product.batch), expr)} />
                       </td>
                       <td className="px-1 py-1 text-center">
-                        <button onClick={() => handleDeleteProduct(product.sku)} className="w-6 h-6 rounded-full bg-red-50 text-accent-red hover:bg-accent-red hover:text-white text-[10px] font-bold transition" title="Hapus">✕</button>
+                        <button onClick={() => handleDeleteProduct(product.sku, product.batch)} className="w-6 h-6 rounded-full bg-red-50 text-accent-red hover:bg-accent-red hover:text-white text-[10px] font-bold transition" title="Hapus">✕</button>
                       </td>
                     </tr>
                   ))}
@@ -671,16 +690,16 @@ function InputPageContent() {
                         <span className="break-words text-[11px] leading-tight">{product.productName}</span>
                       </td>
                       <td className="px-2 py-2 text-text-secondary whitespace-nowrap">
-                        {editingBatchKey === `new-${product.sku}` ? (
+                        {editingBatchKey === `new-${product.sku}-${product.batch}` ? (
                           <span className="flex items-center gap-1">
                             <input type="text" value={editingBatchValue} onChange={(e) => setEditingBatchValue(e.target.value)}
-                              onKeyDown={(e) => { if (e.key === 'Enter') handleBatchSave(product.sku, true); if (e.key === 'Escape') setEditingBatchKey(null); }}
+                              onKeyDown={(e) => { if (e.key === 'Enter') handleBatchSave(product.sku, product.batch, true); if (e.key === 'Escape') setEditingBatchKey(null); }}
                               className="w-16 px-1.5 py-0.5 border border-primary rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary" autoFocus />
-                            <button onClick={() => handleBatchSave(product.sku, true)} className="text-primary hover:text-primary-dark text-xs" title="Simpan">✓</button>
+                            <button onClick={() => handleBatchSave(product.sku, product.batch, true)} className="text-primary hover:text-primary-dark text-xs" title="Simpan">✓</button>
                             <button onClick={() => setEditingBatchKey(null)} className="text-accent-red hover:text-red-700 text-xs" title="Batal">✕</button>
                           </span>
                         ) : (
-                          <span className="flex items-center gap-1 group cursor-pointer" onClick={() => handleBatchEdit(`new-${product.sku}`, product.batch)}>
+                          <span className="flex items-center gap-1 group cursor-pointer" onClick={() => handleBatchEdit(`new-${product.sku}-${product.batch}`, product.batch)}>
                             <span className="text-[11px]">{product.batch}</span>
                             <span className="text-[10px] text-text-secondary opacity-0 group-hover:opacity-100 transition">✏️</span>
                           </span>
@@ -690,7 +709,7 @@ function InputPageContent() {
                         <QtyInput wide value={quantities[productKey(product.sku, product.batch)] || 0} onChange={(v) => handleQuantityChange(productKey(product.sku, product.batch), v)} onExprCommit={(expr) => handleExprCommit(productKey(product.sku, product.batch), expr)} />
                       </td>
                       <td className="px-1 py-1 text-center">
-                        <button onClick={() => handleDeleteNewProduct(product.sku)} className="w-6 h-6 rounded-full bg-red-50 text-accent-red hover:bg-accent-red hover:text-white text-[10px] font-bold transition" title="Hapus">✕</button>
+                        <button onClick={() => handleDeleteNewProduct(product.sku, product.batch)} className="w-6 h-6 rounded-full bg-red-50 text-accent-red hover:bg-accent-red hover:text-white text-[10px] font-bold transition" title="Hapus">✕</button>
                       </td>
                     </tr>
                   ))}
