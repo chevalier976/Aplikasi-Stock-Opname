@@ -42,6 +42,9 @@ function InputPageContent() {
   // Inline batch editing
   const [editingBatchKey, setEditingBatchKey] = useState<string | null>(null);
   const [editingBatchValue, setEditingBatchValue] = useState("");
+
+  // Unique key per product row: SKU + batch combination
+  const productKey = (sku: string, batch: string) => `${sku}__${batch}`;
   // All products cached locally for instant client-side search
   const allProductsRef = useRef<Product[] | null>(null);
 
@@ -85,7 +88,7 @@ function InputPageContent() {
     if (cached) {
       setProducts(cached.data);
       const init: Record<string, number> = {};
-      cached.data.forEach((p) => (init[p.sku] = 0));
+      cached.data.forEach((p) => (init[productKey(p.sku, p.batch)] = 0));
       setQuantities(init);
       setLoading(false); // UI langsung tampil!
     }
@@ -100,7 +103,8 @@ function InputPageContent() {
         setQuantities((prev) => {
           const next = { ...prev };
           result.products!.forEach((p) => {
-            if (next[p.sku] === undefined) next[p.sku] = 0;
+            const k = productKey(p.sku, p.batch);
+            if (next[k] === undefined) next[k] = 0;
           });
           return next;
         });
@@ -119,17 +123,17 @@ function InputPageContent() {
     }
   };
 
-  const handleQuantityChange = (sku: string, qty: number) => {
+  const handleQuantityChange = (key: string, qty: number) => {
     setQuantities((prev) => ({
       ...prev,
-      [sku]: qty,
+      [key]: qty,
     }));
   };
 
-  const handleExprCommit = (sku: string, expr: string) => {
+  const handleExprCommit = (key: string, expr: string) => {
     setFormulas((prev) => ({
       ...prev,
-      [sku]: expr,
+      [key]: expr,
     }));
   };
 
@@ -148,7 +152,8 @@ function InputPageContent() {
     setNewProducts((prev) => prev.filter((p) => p.sku !== sku));
     setQuantities((prev) => {
       const copy = { ...prev };
-      delete copy[sku];
+      // Delete all keys that start with this sku
+      Object.keys(copy).forEach((k) => { if (k.startsWith(sku + "__")) delete copy[k]; });
       return copy;
     });
     toast.success("Produk berhasil dihapus");
@@ -182,7 +187,7 @@ function InputPageContent() {
     setNewProducts((prev) => prev.filter((p) => p.sku !== sku));
     setQuantities((prev) => {
       const copy = { ...prev };
-      delete copy[sku];
+      Object.keys(copy).forEach((k) => { if (k.startsWith(sku + "__")) delete copy[k]; });
       return copy;
     });
     toast.success("Produk baru dihapus dari daftar");
@@ -299,12 +304,13 @@ function InputPageContent() {
     };
 
     setNewProducts((prev) => [...prev, newProduct]);
+    const nk = productKey(newProduct.sku, newProduct.batch);
     setQuantities((prev) => ({
       ...prev,
-      [newProduct.sku]: newProductForm.qty,
+      [nk]: newProductForm.qty,
     }));
     if (newProductFormula) {
-      setFormulas((prev) => ({ ...prev, [newProduct.sku]: newProductFormula }));
+      setFormulas((prev) => ({ ...prev, [nk]: newProductFormula }));
     }
 
     // Reset form
@@ -339,28 +345,34 @@ function InputPageContent() {
 
   const handleSave = () => {
     const existingItems = products
-      .filter((product) => quantities[product.sku] > 0)
-      .map((product) => ({
-        productName: product.productName,
-        sku: product.sku,
-        batch: product.batch,
-        barcode: product.barcode || "",
-        qty: quantities[product.sku],
-        formula: formulas[product.sku] || "",
-        isNew: false,
-      }));
+      .filter((product) => quantities[productKey(product.sku, product.batch)] > 0)
+      .map((product) => {
+        const k = productKey(product.sku, product.batch);
+        return {
+          productName: product.productName,
+          sku: product.sku,
+          batch: product.batch,
+          barcode: product.barcode || "",
+          qty: quantities[k],
+          formula: formulas[k] || "",
+          isNew: false,
+        };
+      });
 
     const newItems = newProducts
-      .filter((product) => quantities[product.sku] > 0)
-      .map((product) => ({
-        productName: product.productName,
-        sku: product.sku,
-        batch: product.batch,
-        barcode: product.barcode || "",
-        qty: quantities[product.sku],
-        formula: formulas[product.sku] || "",
-        isNew: true,
-      }));
+      .filter((product) => quantities[productKey(product.sku, product.batch)] > 0)
+      .map((product) => {
+        const k = productKey(product.sku, product.batch);
+        return {
+          productName: product.productName,
+          sku: product.sku,
+          batch: product.batch,
+          barcode: product.barcode || "",
+          qty: quantities[k],
+          formula: formulas[k] || "",
+          isNew: true,
+        };
+      });
 
     const items = [...existingItems, ...newItems];
 
@@ -641,7 +653,7 @@ function InputPageContent() {
                         )}
                       </td>
                       <td className="px-1 py-1 text-center">
-                        <QtyInput wide value={quantities[product.sku] || 0} onChange={(v) => handleQuantityChange(product.sku, v)} onExprCommit={(expr) => handleExprCommit(product.sku, expr)} />
+                        <QtyInput wide value={quantities[productKey(product.sku, product.batch)] || 0} onChange={(v) => handleQuantityChange(productKey(product.sku, product.batch), v)} onExprCommit={(expr) => handleExprCommit(productKey(product.sku, product.batch), expr)} />
                       </td>
                       <td className="px-1 py-1 text-center">
                         <button onClick={() => handleDeleteProduct(product.sku)} className="w-6 h-6 rounded-full bg-red-50 text-accent-red hover:bg-accent-red hover:text-white text-[10px] font-bold transition" title="Hapus">✕</button>
@@ -675,7 +687,7 @@ function InputPageContent() {
                         )}
                       </td>
                       <td className="px-1 py-1 text-center">
-                        <QtyInput wide value={quantities[product.sku] || 0} onChange={(v) => handleQuantityChange(product.sku, v)} onExprCommit={(expr) => handleExprCommit(product.sku, expr)} />
+                        <QtyInput wide value={quantities[productKey(product.sku, product.batch)] || 0} onChange={(v) => handleQuantityChange(productKey(product.sku, product.batch), v)} onExprCommit={(expr) => handleExprCommit(productKey(product.sku, product.batch), expr)} />
                       </td>
                       <td className="px-1 py-1 text-center">
                         <button onClick={() => handleDeleteNewProduct(product.sku)} className="w-6 h-6 rounded-full bg-red-50 text-accent-red hover:bg-accent-red hover:text-white text-[10px] font-bold transition" title="Hapus">✕</button>
