@@ -382,35 +382,26 @@ export default function ScanPage() {
           </div>
         </div>
 
-        {/* ── Scan Terakhir ── */}
+        {/* ── Scan Terakhir (info only) ── */}
         {stats.recentScans.length > 0 && (
           <div className="mt-6">
             <h2 className="text-base font-semibold text-text-primary mb-3">Scan Terakhir</h2>
-            <div className="space-y-3">
-              {stats.recentScans.map((scan, idx) => (
-                <button
+            <div className="space-y-2">
+              {stats.recentScans.map((scan) => (
+                <div
                   key={scan.location}
-                  onClick={() => {
-                    setLocationCode(scan.location);
-                    searchLocation(scan.location);
-                  }}
-                  className="w-full bg-white rounded-2xl p-4 shadow-card flex items-center gap-4 text-left active:scale-[0.98] transition"
+                  className="bg-white rounded-2xl px-4 py-3 shadow-card flex items-center gap-3"
                 >
-                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <span className="w-2.5 h-2.5 bg-primary rounded-full"></span>
-                  </div>
+                  <span className="w-2 h-2 bg-primary rounded-full flex-shrink-0"></span>
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-text-primary text-sm">{scan.location}</p>
-                    <p className="text-xs text-text-secondary mt-0.5">{formatRelativeTime(scan.timestamp)}</p>
+                    <p className="font-medium text-text-primary text-sm truncate">{scan.location}</p>
                   </div>
-                  <div className="text-right flex-shrink-0">
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary-pale text-primary text-xs font-semibold rounded-full">
-                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14" /><path d="M22 4L12 14.01l-3-3" /></svg>
-                      Selesai
-                    </span>
-                    <p className="text-xs text-text-secondary mt-1">{scan.items} item</p>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className="text-[11px] text-text-secondary">{scan.items} item</span>
+                    <span className="text-[11px] text-text-secondary">·</span>
+                    <span className="text-[11px] text-text-secondary">{formatRelativeTime(scan.timestamp)}</span>
                   </div>
-                </button>
+                </div>
               ))}
             </div>
           </div>

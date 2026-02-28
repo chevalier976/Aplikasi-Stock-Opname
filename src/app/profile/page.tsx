@@ -76,58 +76,20 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* ── Menu Items ── */}
+      {/* ── Info Card ── */}
       <div className="mx-4 mt-4">
         <div className="bg-white rounded-2xl shadow-card overflow-hidden">
-          {[
-            { icon: "bell", label: "Notifikasi", disabled: true },
-            { icon: "palette", label: "Tampilan", disabled: true },
-            { icon: "shield", label: "Keamanan", disabled: true },
-            { icon: "help", label: "Bantuan", disabled: true },
-            { icon: "info", label: "Tentang Aplikasi", disabled: true },
-          ].map((item, idx) => (
-            <button
-              key={item.label}
-              className={`w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 transition ${
-                idx < 4 ? "border-b border-border" : ""
-              } ${item.disabled ? "opacity-60" : ""}`}
-              disabled={item.disabled}
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
-                  {item.icon === "bell" && (
-                    <svg className="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" />
-                    </svg>
-                  )}
-                  {item.icon === "palette" && (
-                    <svg className="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="12" r="10" /><circle cx="12" cy="8" r="1.5" fill="currentColor" /><circle cx="8" cy="12" r="1.5" fill="currentColor" /><circle cx="16" cy="12" r="1.5" fill="currentColor" /><circle cx="12" cy="16" r="1.5" fill="currentColor" />
-                    </svg>
-                  )}
-                  {item.icon === "shield" && (
-                    <svg className="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                    </svg>
-                  )}
-                  {item.icon === "help" && (
-                    <svg className="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3M12 17h.01" />
-                    </svg>
-                  )}
-                  {item.icon === "info" && (
-                    <svg className="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" />
-                    </svg>
-                  )}
-                </div>
-                <span className="text-sm font-medium text-text-primary">{item.label}</span>
-              </div>
-              <svg className="w-5 h-5 text-text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M9 18l6-6-6-6" />
+          <div className="px-5 py-4 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
+              <svg className="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" />
               </svg>
-            </button>
-          ))}
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-text-primary">Tentang Aplikasi</p>
+              <p className="text-xs text-text-secondary">BLP Stock Opname v1.0.0</p>
+            </div>
+          </div>
         </div>
       </div>
 

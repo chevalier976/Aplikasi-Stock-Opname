@@ -400,7 +400,7 @@ function InputPageContent() {
   const totalItems = Object.values(quantities).reduce((sum, qty) => sum + qty, 0);
 
   return (
-    <div className="min-h-screen pb-32 bg-[var(--primary-bg)]">
+    <div className="min-h-screen pb-44 bg-[var(--primary-bg)]">
       {/* ── Header ── */}
       <div className="bg-white px-5 pt-6 pb-4 shadow-card">
         <div className="flex items-center gap-3 mb-1">
@@ -587,7 +587,6 @@ function InputPageContent() {
                 <thead>
                   <tr className="bg-primary text-white">
                     <th className="text-left px-3 py-2.5 font-semibold whitespace-nowrap">Produk</th>
-                    <th className="text-left px-2 py-2.5 font-semibold whitespace-nowrap">SKU</th>
                     <th className="text-left px-2 py-2.5 font-semibold whitespace-nowrap">Batch</th>
                     <th className="text-center px-2 py-2.5 font-semibold whitespace-nowrap">Qty</th>
                     <th className="px-1 py-2.5"></th>
@@ -599,7 +598,6 @@ function InputPageContent() {
                       <td className="px-3 py-2 text-text-primary font-medium">
                         <span className="break-words text-[11px] leading-tight">{product.productName}</span>
                       </td>
-                      <td className="px-2 py-2 text-text-secondary whitespace-nowrap text-[11px]">{product.sku}</td>
                       <td className="px-2 py-2 text-text-secondary whitespace-nowrap">
                         {editingBatchKey === `existing-${product.sku}` ? (
                           <span className="flex items-center gap-1">
@@ -626,7 +624,7 @@ function InputPageContent() {
                   ))}
                   {newProducts.length > 0 && (
                     <tr className="bg-primary/5">
-                      <td colSpan={5} className="px-3 py-1.5 text-xs font-semibold text-primary">Produk Baru</td>
+                      <td colSpan={4} className="px-3 py-1.5 text-xs font-semibold text-primary">Produk Baru</td>
                     </tr>
                   )}
                   {newProducts.map((product, idx) => (
@@ -634,7 +632,6 @@ function InputPageContent() {
                       <td className="px-3 py-2 text-text-primary font-medium">
                         <span className="break-words text-[11px] leading-tight">{product.productName}</span>
                       </td>
-                      <td className="px-2 py-2 text-text-secondary whitespace-nowrap text-[11px]">{product.sku}</td>
                       <td className="px-2 py-2 text-text-secondary whitespace-nowrap">
                         {editingBatchKey === `new-${product.sku}` ? (
                           <span className="flex items-center gap-1">
