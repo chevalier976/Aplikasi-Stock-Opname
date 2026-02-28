@@ -540,21 +540,6 @@ export default function HistoryPage() {
     );
   }
 
-  // Group history by location for the card view
-  const locationGroups = useMemo(() => {
-    const map = new Map<string, { entries: typeof filteredHistory; totalQty: number; latestTimestamp: string }>();
-    filteredHistory.forEach((e) => {
-      const existing = map.get(e.location);
-      if (!existing) {
-        map.set(e.location, { entries: [e], totalQty: e.qty, latestTimestamp: e.timestamp });
-      } else {
-        existing.entries.push(e);
-        existing.totalQty += e.qty;
-      }
-    });
-    return Array.from(map.entries()).map(([loc, data]) => ({ location: loc, ...data }));
-  }, [filteredHistory]);
-
   return (
     <div className="min-h-screen pb-24 bg-[var(--primary-bg)]">
       {/* ── Header ── */}
