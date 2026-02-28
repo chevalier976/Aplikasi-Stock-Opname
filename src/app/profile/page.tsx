@@ -27,10 +27,11 @@ export default function ProfilePage() {
   const stats = useMemo(() => {
     const locations = new Set(history.map((e) => e.location));
     const totalItems = history.reduce((sum, e) => sum + e.qty, 0);
+    const totalEntries = history.length; // jumlah produk yang sudah diinput
     return {
       discan: locations.size,
       items: totalItems,
-      progress: 0, // will be displayed based on known total
+      entries: totalEntries,
     };
   }, [history]);
 
@@ -59,19 +60,19 @@ export default function ProfilePage() {
       </div>
 
       {/* ── Stats Row ── */}
-      <div className="mx-4 -mt-0">
-        <div className="bg-white rounded-2xl shadow-card mt-4 grid grid-cols-3 divide-x divide-border">
+      <div className="mx-4 mt-4">
+        <div className="bg-white rounded-2xl shadow-card grid grid-cols-3 divide-x divide-border">
           <div className="py-4 text-center">
-            <p className="text-xl font-bold text-text-primary">{stats.discan}</p>
-            <p className="text-xs text-text-secondary mt-0.5">Discan</p>
+            <p className="text-xl font-bold text-primary">{stats.discan}</p>
+            <p className="text-[11px] text-text-secondary mt-0.5">Lokasi Discan</p>
           </div>
           <div className="py-4 text-center">
-            <p className="text-xl font-bold text-text-primary">{stats.items.toLocaleString()}</p>
-            <p className="text-xs text-text-secondary mt-0.5">Item</p>
+            <p className="text-xl font-bold text-text-primary">{stats.entries.toLocaleString()}</p>
+            <p className="text-[11px] text-text-secondary mt-0.5">Produk Diinput</p>
           </div>
           <div className="py-4 text-center">
-            <p className="text-xl font-bold text-primary">{stats.discan > 0 ? `${stats.discan}` : "0"}</p>
-            <p className="text-xs text-text-secondary mt-0.5">Lokasi</p>
+            <p className="text-xl font-bold text-accent-yellow">{stats.items.toLocaleString()}</p>
+            <p className="text-[11px] text-text-secondary mt-0.5">Total Item</p>
           </div>
         </div>
       </div>
