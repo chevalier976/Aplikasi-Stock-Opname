@@ -382,27 +382,29 @@ export default function ScanPage() {
           </div>
         </div>
 
-        {/* ── Scan Terakhir (info only) ── */}
+        {/* ── Scan Terakhir (compact table) ── */}
         {stats.recentScans.length > 0 && (
-          <div className="mt-6">
-            <h2 className="text-base font-semibold text-text-primary mb-3">Scan Terakhir</h2>
-            <div className="space-y-2">
-              {stats.recentScans.map((scan) => (
-                <div
-                  key={scan.location}
-                  className="bg-white rounded-2xl px-4 py-3 shadow-card flex items-center gap-3"
-                >
-                  <span className="w-2 h-2 bg-primary rounded-full flex-shrink-0"></span>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-text-primary text-sm truncate">{scan.location}</p>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className="text-[11px] text-text-secondary">{scan.items} item</span>
-                    <span className="text-[11px] text-text-secondary">·</span>
-                    <span className="text-[11px] text-text-secondary">{formatRelativeTime(scan.timestamp)}</span>
-                  </div>
-                </div>
-              ))}
+          <div className="mt-5">
+            <h2 className="text-sm font-semibold text-text-primary mb-2">Scan Terakhir</h2>
+            <div className="bg-white rounded-xl shadow-card overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-border">
+                    <th className="text-left px-3 py-1.5 font-semibold text-text-secondary">Lokasi</th>
+                    <th className="text-right px-3 py-1.5 font-semibold text-text-secondary w-14">Item</th>
+                    <th className="text-right px-3 py-1.5 font-semibold text-text-secondary w-20">Waktu</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {stats.recentScans.map((scan) => (
+                    <tr key={scan.location}>
+                      <td className="px-3 py-2 text-text-primary font-medium text-[11px]">{scan.location}</td>
+                      <td className="px-3 py-2 text-right text-primary font-semibold">{scan.items}</td>
+                      <td className="px-3 py-2 text-right text-text-secondary text-[10px]">{formatRelativeTime(scan.timestamp)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}

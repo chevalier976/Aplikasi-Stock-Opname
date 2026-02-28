@@ -834,7 +834,7 @@ export default function HistoryPage() {
           </div>
         )}
 
-        {/* ── Data Table ── */}
+        {/* ── Data Cards ── */}
         {filteredHistory.length === 0 ? (
           <div className="bg-white rounded-2xl p-8 text-center shadow-card">
             <svg className="w-12 h-12 mx-auto mb-3 text-text-secondary/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -850,80 +850,72 @@ export default function HistoryPage() {
             )}
           </div>
         ) : (
-          <div className="bg-white rounded-2xl shadow-card overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="min-w-[640px] w-full text-xs">
-                <thead>
-                  <tr className="bg-primary text-white">
-                    <th className="text-left px-3 py-3 font-semibold whitespace-nowrap">Lokasi</th>
-                    <th className="text-left px-3 py-3 font-semibold whitespace-nowrap">Nama Produk</th>
-                    <th className="text-left px-3 py-3 font-semibold whitespace-nowrap">Batch</th>
-                    <th className="text-right px-3 py-3 font-semibold whitespace-nowrap">Qty Fisik</th>
-                    <th className="text-center px-2 py-3 font-semibold whitespace-nowrap">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredHistory.map((entry, idx) => (
-                    <tr
-                      key={entry.rowId}
-                      className={`border-b border-border hover:bg-primary-pale/50 transition ${idx % 2 === 1 ? "bg-gray-50/50" : "bg-white"}`}
-                    >
-                      <td className="px-3 py-2.5 text-text-secondary whitespace-nowrap text-[11px]">{entry.location}</td>
-                      <td className="px-3 py-2.5 text-text-primary whitespace-nowrap">
-                        <span className="font-medium text-[11px]">{entry.productName}</span>
-                        {entry.edited === "Yes" && <span className="ml-0.5 text-[10px] text-accent-yellow" title={`Diedit: ${entry.editTimestamp}`}>✏️</span>}
-                      </td>
-                      <td className="px-3 py-2.5 text-text-secondary whitespace-nowrap">
-                        {editingBatch === entry.rowId ? (
-                          <input
-                            type="text" value={editingBatchValue}
-                            onChange={(e) => setEditingBatchValue(e.target.value)}
-                            onBlur={() => saveInlineBatch(entry)}
-                            onKeyDown={(e) => { if (e.key === "Enter") saveInlineBatch(entry); if (e.key === "Escape") setEditingBatch(null); }}
-                            autoFocus className="w-24 px-1.5 py-0.5 border border-primary rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                          />
-                        ) : (
-                          <span className="inline-flex items-center gap-1 cursor-pointer group" onClick={() => startInlineBatchEdit(entry)}>
-                            {entry.batch}
-                            <span className="text-[10px] text-text-secondary opacity-0 group-hover:opacity-100 transition">✏️</span>
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2.5 text-right font-semibold text-primary whitespace-nowrap">
-                        {editingQty === entry.rowId ? (
-                          <div className="flex flex-col items-end">
-                            <QtyInput wide value={editingQtyValue} onChange={(v) => setEditingQtyValue(v)} onExprCommit={(expr) => setEditingQtyFormula(expr)} />
-                            <div className="flex gap-1 mt-1">
-                              <button type="button" onClick={() => saveInlineQty(entry)} className="px-2 py-0.5 bg-primary text-white text-[10px] rounded-md font-semibold hover:bg-primary-light transition">💾</button>
-                              <button type="button" onClick={() => setEditingQty(null)} className="px-2 py-0.5 bg-gray-200 text-text-primary text-[10px] rounded-md font-semibold hover:bg-gray-300 transition">✕</button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div>
-                            <span className="inline-flex items-center justify-end gap-1">
-                              <span className={entry.formula ? "cursor-pointer underline decoration-dotted" : ""} onClick={() => { if (entry.formula) setShowFormula(showFormula === entry.rowId ? null : entry.rowId); }}>
-                                {entry.qty.toLocaleString()}
-                              </span>
-                              {entry.formula && <span className="text-[9px] text-text-secondary">🧮</span>}
-                              <button type="button" onClick={() => startInlineQtyEdit(entry)} className="text-[10px] text-text-secondary hover:text-primary transition" title="Edit qty">✏️</button>
-                            </span>
-                            {showFormula === entry.rowId && entry.formula && (
-                              <div className="mt-0.5 bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded-lg shadow-lg whitespace-nowrap">{entry.formula}</div>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-2 py-2.5 text-center whitespace-nowrap">
-                        <div className="flex items-center justify-center gap-1">
-                          <button onClick={() => handleEdit(entry)} className="px-2 py-1 bg-primary text-white text-[10px] rounded-md font-medium hover:bg-primary-light transition">Edit</button>
-                          <button onClick={() => handleDelete(entry)} className="px-2 py-1 bg-accent-red text-white text-[10px] rounded-md font-medium hover:bg-red-600 transition">Hapus</button>
+          <div className="space-y-2">
+            {filteredHistory.map((entry) => (
+              <div key={entry.rowId} className="bg-white rounded-xl shadow-card border border-border p-3">
+                {/* Row 1: Location + Product Name */}
+                <div className="flex items-start gap-2 mb-1.5">
+                  <span className="px-1.5 py-0.5 bg-primary/10 text-primary text-[10px] font-semibold rounded flex-shrink-0">{entry.location}</span>
+                  <p className="text-[11px] font-medium text-text-primary leading-tight flex-1">
+                    {entry.productName}
+                    {entry.edited === "Yes" && <span className="ml-0.5 text-[10px] text-accent-yellow" title={`Diedit: ${entry.editTimestamp}`}>✏️</span>}
+                  </p>
+                </div>
+                {/* Row 2: Batch | Qty | Actions */}
+                <div className="flex items-center gap-2">
+                  {/* Batch */}
+                  <div className="flex items-center gap-1 min-w-0">
+                    <span className="text-[10px] text-text-secondary">Batch:</span>
+                    {editingBatch === entry.rowId ? (
+                      <input
+                        type="text" value={editingBatchValue}
+                        onChange={(e) => setEditingBatchValue(e.target.value)}
+                        onBlur={() => saveInlineBatch(entry)}
+                        onKeyDown={(e) => { if (e.key === "Enter") saveInlineBatch(entry); if (e.key === "Escape") setEditingBatch(null); }}
+                        autoFocus className="w-20 px-1 py-0.5 border border-primary rounded text-[11px] focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    ) : (
+                      <span className="text-[11px] text-text-secondary cursor-pointer hover:text-primary transition" onClick={() => startInlineBatchEdit(entry)}>
+                        {entry.batch} <span className="text-[9px]">✏️</span>
+                      </span>
+                    )}
+                  </div>
+                  {/* Qty */}
+                  <div className="flex items-center gap-1 ml-auto">
+                    <span className="text-[10px] text-text-secondary">Qty:</span>
+                    {editingQty === entry.rowId ? (
+                      <div className="flex flex-col items-end">
+                        <QtyInput wide value={editingQtyValue} onChange={(v) => setEditingQtyValue(v)} onExprCommit={(expr) => setEditingQtyFormula(expr)} />
+                        <div className="flex gap-1 mt-1">
+                          <button type="button" onClick={() => saveInlineQty(entry)} className="px-2 py-0.5 bg-primary text-white text-[10px] rounded font-semibold">💾</button>
+                          <button type="button" onClick={() => setEditingQty(null)} className="px-2 py-0.5 bg-gray-200 text-text-primary text-[10px] rounded font-semibold">✕</button>
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                      </div>
+                    ) : (
+                      <span className="inline-flex items-center gap-0.5">
+                        <span
+                          className={`text-sm font-bold text-primary ${entry.formula ? "cursor-pointer underline decoration-dotted" : ""}`}
+                          onClick={() => { if (entry.formula) setShowFormula(showFormula === entry.rowId ? null : entry.rowId); }}
+                        >
+                          {entry.qty.toLocaleString()}
+                        </span>
+                        {entry.formula && <span className="text-[9px] text-text-secondary">🧮</span>}
+                        <button type="button" onClick={() => startInlineQtyEdit(entry)} className="text-[10px] text-text-secondary hover:text-primary" title="Edit qty">✏️</button>
+                      </span>
+                    )}
+                  </div>
+                  {/* Actions */}
+                  <div className="flex items-center gap-1 flex-shrink-0 ml-1">
+                    <button onClick={() => handleEdit(entry)} className="px-2 py-1 bg-primary text-white text-[10px] rounded font-medium">Edit</button>
+                    <button onClick={() => handleDelete(entry)} className="px-2 py-1 bg-accent-red text-white text-[10px] rounded font-medium">Hapus</button>
+                  </div>
+                </div>
+                {/* Formula tooltip */}
+                {showFormula === entry.rowId && entry.formula && (
+                  <div className="mt-1 bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded inline-block">{entry.formula}</div>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </div>
