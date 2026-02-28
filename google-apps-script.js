@@ -418,12 +418,9 @@ function deleteEntry(rowId) {
 
     for (var i = 1; i < values.length; i++) {
       if (values[i][1] === rowId) {
-        var location = values[i][4];
-        var sku = values[i][6];
         sheet.deleteRow(i + 1);
-        if (location && sku) deleteProductInternal(location, sku);
         bumpCacheVersion();
-        return { success: true, message: "Entry dan Master Data berhasil dihapus" };
+        return { success: true, message: "Entry berhasil dihapus" };
       }
     }
     return { success: false, message: "Entry tidak ditemukan" };
