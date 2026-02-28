@@ -8,7 +8,7 @@ import LoadingSpinner from "@/components/LoadingSpinner";
 import BarcodeScanner from "@/components/BarcodeScanner";
 import QtyInput from "@/components/QtyInput";
 import { calcExpr } from "@/components/QtyInput";
-import { getProductsApi, saveStockOpnameApi, deleteProductApi, lookupBarcodeApi, searchProductsApi, warmupCacheApi, preloadHistory, getAllProductsApi, invalidateMemCache } from "@/lib/api";
+import { getProductsApi, saveStockOpnameApi, deleteProductApi, addMasterProductApi, lookupBarcodeApi, searchProductsApi, warmupCacheApi, preloadHistory, getAllProductsApi, invalidateMemCache } from "@/lib/api";
 import { Product, HistoryEntry } from "@/lib/types";
 import { getCache, setCache, clearCache } from "@/lib/cache";
 import toast from "react-hot-toast";
@@ -39,6 +39,7 @@ function InputPageContent() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [searchTimer, setSearchTimer] = useState<NodeJS.Timeout | null>(null);
   const [newProductFormula, setNewProductFormula] = useState("");
+  const [savingMasterData, setSavingMasterData] = useState(false);
   // Inline batch editing
   const [editingBatchKey, setEditingBatchKey] = useState<string | null>(null);
   const [editingBatchValue, setEditingBatchValue] = useState("");
@@ -616,6 +617,58 @@ function InputPageContent() {
                 className="w-full bg-primary text-white py-3 rounded-xl font-semibold hover:bg-primary-light transition text-sm active:scale-[0.98]">
                 Tambahkan Produk
               </button>
+
+              {/* Divider */}
+              <div className="relative flex items-center gap-2 py-1">
+                <div className="flex-1 border-t border-border" />
+                <span className="text-[10px] text-text-secondary">atau</span>
+                <div className="flex-1 border-t border-border" />
+              </div>
+
+              {/* Simpan ke Master Data saja */}
+              <button
+                onClick={async () => {
+                  if (!newProductForm.productName || !newProductForm.sku || !newProductForm.batch) {
+                    toast.error("Nama Produk, SKU, dan Batch harus diisi");
+                    return;
+                  }
+                  const allProds = [...products, ...newProducts];
+                  if (allProds.some((p) => p.sku === newProductForm.sku && p.batch === newProductForm.batch)) {
+                    toast.error("Produk dengan SKU dan Batch yang sama sudah ada");
+                    return;
+                  }
+                  setSavingMasterData(true);
+                  try {
+                    const result = await addMasterProductApi(location, newProductForm.productName, newProductForm.sku, newProductForm.batch, newProductForm.barcode);
+                    if (result.success) {
+                      // Add to local products list
+                      const newProd: Product = { productName: newProductForm.productName, sku: newProductForm.sku, batch: newProductForm.batch, barcode: newProductForm.barcode || undefined };
+                      setProducts((prev) => [...prev, newProd]);
+                      setQuantities((prev) => ({ ...prev, [productKey(newProd.sku, newProd.batch)]: 0 }));
+                      // Update cache
+                      const ck = `products:${location}`;
+                      setCache(ck, [...products, newProd]);
+                      // Reset form
+                      setNewProductForm({ productName: "", sku: "", batch: "", barcode: "", qty: 0 });
+                      setNewProductFormula("");
+                      setShowAddForm(false);
+                      toast.success("Produk berhasil ditambahkan ke Master Data");
+                    } else {
+                      toast.error(result.message || "Gagal menambahkan produk");
+                    }
+                  } catch (error) {
+                    console.error("Add master product error:", error);
+                    toast.error("Gagal menambahkan produk ke Master Data");
+                  } finally {
+                    setSavingMasterData(false);
+                  }
+                }}
+                disabled={savingMasterData}
+                className="w-full bg-white border-2 border-primary text-primary py-3 rounded-xl font-semibold hover:bg-primary-pale transition text-sm active:scale-[0.98] disabled:opacity-50"
+              >
+                {savingMasterData ? "Menyimpan..." : "Simpan ke Master Data Saja"}
+              </button>
+              <p className="text-[10px] text-text-secondary text-center -mt-1">Menambahkan produk ke daftar lokasi tanpa Stock Opname</p>
 
               {showBarcodeScanner && (
                 <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">

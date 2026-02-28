@@ -110,6 +110,7 @@ function doPost(e) {
       case "updateEntry":     result = updateEntry(data); break;
       case "deleteProduct":   result = deleteProduct(data.locationCode, data.sku, data.batch); break;
       case "deleteEntry":     result = deleteEntry(data.rowId); break;
+      case "addMasterProduct": result = addMasterProduct(data); break;
       case "lookupBarcode":   result = lookupBarcode(data.barcode); break;
       case "searchProducts":  result = searchProducts(data.query); break;
       case "searchLocations": result = searchLocations(data.query); break;
@@ -313,6 +314,27 @@ function warmupCache(payload) {
 // ──────────────────────────────────────────────────────────────
 // WRITE — uses lock, minimal hold time
 // ──────────────────────────────────────────────────────────────
+
+function addMasterProduct(data) {
+  return withScriptLock(function() {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Master Data");
+    var mdData = sheet.getDataRange().getValues();
+    var loc = normalizeLocation(data.locationCode);
+    var sku = normalizeText(data.sku);
+    var batch = normalizeText(data.batch || "");
+
+    // Check if already exists
+    for (var i = 1; i < mdData.length; i++) {
+      if (normalizeLocation(mdData[i][0]) === loc && normalizeText(mdData[i][2]) === sku && normalizeText(mdData[i][3]) === batch) {
+        return { success: false, message: "Produk dengan SKU dan Batch yang sama sudah ada di lokasi ini" };
+      }
+    }
+
+    sheet.appendRow([loc, data.productName || "", sku, batch, data.barcode || ""]);
+    bumpCacheVersion();
+    return { success: true, message: "Produk berhasil ditambahkan ke Master Data" };
+  });
+}
 
 function deleteProduct(locationCode, sku, batch) {
   return withScriptLock(function() { return deleteProductInternal(locationCode, sku, batch); });

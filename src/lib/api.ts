@@ -205,6 +205,18 @@ export const deleteProductApi = async (
   return apiCall("deleteProduct", { locationCode, sku, batch });
 };
 
+export const addMasterProductApi = async (
+  locationCode: string,
+  productName: string,
+  sku: string,
+  batch: string,
+  barcode?: string
+): Promise<{ success: boolean; message?: string }> => {
+  invalidateMemCache("getProducts");
+  invalidateMemCache("getAllProducts");
+  return apiCall("addMasterProduct", { locationCode, productName, sku, batch, barcode: barcode || "" });
+};
+
 export const lookupBarcodeApi = async (
   barcode: string
 ): Promise<{ success: boolean; product?: Product; message?: string }> => {
