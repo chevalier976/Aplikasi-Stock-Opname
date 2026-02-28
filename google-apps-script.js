@@ -424,7 +424,28 @@ function deleteEntry(rowId) {
 
     for (var i = 1; i < values.length; i++) {
       if (values[i][1] === rowId) {
+        // Capture product info before deleting the row
+        var location = normalizeLocation(values[i][4]);
+        var sku = normalizeText(values[i][6]);
+        var batch = normalizeText(values[i][7]);
+
+        // Delete from Stock Opname Results
         sheet.deleteRow(i + 1);
+
+        // Also delete from Master Data (specific location + SKU + batch)
+        if (location && sku) {
+          var mdSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Master Data");
+          var mdData = mdSheet.getDataRange().getValues();
+          for (var j = mdData.length - 1; j >= 1; j--) {
+            if (normalizeLocation(mdData[j][0]) === location &&
+                normalizeText(mdData[j][2]) === sku &&
+                normalizeText(mdData[j][3]) === batch) {
+              mdSheet.deleteRow(j + 1);
+              break; // Only delete the exact match
+            }
+          }
+        }
+
         bumpCacheVersion();
         return { success: true, message: "Entry berhasil dihapus" };
       }
