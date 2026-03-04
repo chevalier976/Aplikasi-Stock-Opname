@@ -292,6 +292,12 @@ export const getAllProductsApi = async (): Promise<{
   return apiCall("getAllProducts");
 };
 
+export const searchProductsGlobalApi = async (
+  query: string
+): Promise<{ success: boolean; products?: Array<{ location: string; productName: string; sku: string; batch: string; barcode: string }> }> => {
+  return apiCall("searchProductsGlobal", { query }, { cancelPrevious: true });
+};
+
 export const moveProductsApi = async (
   fromLocation: string,
   toLocation: string,

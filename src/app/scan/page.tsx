@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import BarcodeScanner from "@/components/BarcodeScanner";
 import BottomNav from "@/components/BottomNav";
-import { getProductsApi, searchLocationsApi, warmupCacheApi, preloadHistory, preloadProducts, getAllLocationsApi, getHistoryApi } from "@/lib/api";
-import { getCache, setCache } from "@/lib/cache";
+import { getProductsApi, searchLocationsApi, warmupCacheApi, preloadHistory, preloadProducts, getAllLocationsApi, getHistoryApi, searchProductsGlobalApi, moveProductsApi } from "@/lib/api";
+import { getCache, setCache, clearCache } from "@/lib/cache";
+import { invalidateMemCache } from "@/lib/api";
 import toast from "react-hot-toast";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { HistoryEntry } from "@/lib/types";
@@ -33,6 +34,21 @@ export default function ScanPage() {
   const allLocationsRef = useRef<LocationResult[] | null>(null);
   const [recentHistory, setRecentHistory] = useState<HistoryEntry[]>([]);
   const [totalLocations, setTotalLocations] = useState(0);
+
+  // Product search + move state
+  const [productQuery, setProductQuery] = useState("");
+  const [productResults, setProductResults] = useState<Array<{ location: string; productName: string; sku: string; batch: string; barcode: string }>>([]);
+  const [productSearchLoading, setProductSearchLoading] = useState(false);
+  const [showProductResults, setShowProductResults] = useState(false);
+  const productSearchTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // Quick move
+  const [moveItem, setMoveItem] = useState<{ location: string; sku: string; batch: string; productName: string } | null>(null);
+  const [quickMoveTarget, setQuickMoveTarget] = useState("");
+  const [quickMoveSuggestions, setQuickMoveSuggestions] = useState<LocationResult[]>([]);
+  const [showQuickMoveSuggestions, setShowQuickMoveSuggestions] = useState(false);
+  const [quickMoving, setQuickMoving] = useState(false);
+  const quickMoveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const quickMoveRef = useRef<HTMLDivElement>(null);
 
   const normalizeLocationCode = (value: string) => value.toUpperCase().replace(/\s+/g, "").trim();
 
@@ -226,6 +242,90 @@ export default function ScanPage() {
     searchLocation(loc.locationCode);
   };
 
+  // ── Product search handlers ──
+  const handleProductSearch = (value: string) => {
+    setProductQuery(value);
+    if (productSearchTimerRef.current) clearTimeout(productSearchTimerRef.current);
+    if (value.trim().length < 2) {
+      setProductResults([]);
+      setShowProductResults(false);
+      return;
+    }
+    productSearchTimerRef.current = setTimeout(async () => {
+      setProductSearchLoading(true);
+      try {
+        const result = await searchProductsGlobalApi(value.trim());
+        if (result.success && result.products) {
+          setProductResults(result.products);
+          setShowProductResults(result.products.length > 0);
+        }
+      } catch { setShowProductResults(false); }
+      finally { setProductSearchLoading(false); }
+    }, 250);
+  };
+
+  const openQuickMove = (item: { location: string; sku: string; batch: string; productName: string }) => {
+    setMoveItem(item);
+    setQuickMoveTarget("");
+    setQuickMoveSuggestions([]);
+    setShowQuickMoveSuggestions(false);
+  };
+
+  const handleQuickMoveLocSearch = (value: string) => {
+    const v = value.toUpperCase().trim();
+    setQuickMoveTarget(v);
+    if (quickMoveTimerRef.current) clearTimeout(quickMoveTimerRef.current);
+    if (!v) { setQuickMoveSuggestions([]); setShowQuickMoveSuggestions(false); return; }
+
+    // Use local allLocations if available
+    if (allLocationsRef.current) {
+      const q = v.toLowerCase();
+      const filtered = allLocationsRef.current
+        .filter(l => l.locationCode.toLowerCase().includes(q) && l.locationCode.toUpperCase() !== moveItem?.location.toUpperCase())
+        .slice(0, 10);
+      setQuickMoveSuggestions(filtered);
+      setShowQuickMoveSuggestions(filtered.length > 0);
+      return;
+    }
+
+    quickMoveTimerRef.current = setTimeout(async () => {
+      try {
+        const result = await searchLocationsApi(v);
+        if (result.success && result.locations) {
+          setQuickMoveSuggestions(result.locations.filter(l => l.locationCode.toUpperCase() !== moveItem?.location.toUpperCase()));
+          setShowQuickMoveSuggestions(true);
+        }
+      } catch {}
+    }, 200);
+  };
+
+  const executeQuickMove = async () => {
+    if (!moveItem || !quickMoveTarget.trim()) return;
+    const target = quickMoveTarget.trim().toUpperCase();
+    if (target === moveItem.location.toUpperCase()) {
+      toast.error("Lokasi tujuan tidak boleh sama");
+      return;
+    }
+    setQuickMoving(true);
+    try {
+      const result = await moveProductsApi(moveItem.location, target, [{ sku: moveItem.sku, batch: moveItem.batch }]);
+      if (result.success) {
+        toast.success(result.message || "Produk berhasil dipindah");
+        setMoveItem(null);
+        // Re-search to refresh results
+        if (productQuery.trim().length >= 2) {
+          const refreshed = await searchProductsGlobalApi(productQuery.trim());
+          if (refreshed.success && refreshed.products) {
+            setProductResults(refreshed.products);
+          }
+        }
+      } else {
+        toast.error(result.message || "Gagal memindah");
+      }
+    } catch { toast.error("Gagal memindah produk"); }
+    finally { setQuickMoving(false); }
+  };
+
   // Format relative time
   const formatRelativeTime = (ts: string) => {
     try {
@@ -394,6 +494,132 @@ export default function ScanPage() {
             <p className="text-[11px] text-text-secondary">Pending</p>
           </div>
         </div>
+
+        {/* ── Cari & Pindah Produk ── */}
+        <div className="mt-4 bg-white rounded-2xl p-4 shadow-card">
+          <h2 className="text-sm font-semibold text-text-primary mb-2 flex items-center gap-2">
+            <svg className="w-4 h-4 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
+            </svg>
+            Cari &amp; Pindah Produk
+          </h2>
+          <div className="relative">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
+            </svg>
+            <input
+              type="text"
+              value={productQuery}
+              onChange={(e) => handleProductSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+              placeholder="Ketik nama produk, SKU, atau batch..."
+              autoComplete="off"
+            />
+            {productSearchLoading && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+          </div>
+
+          {/* Product search results */}
+          {showProductResults && productResults.length > 0 && (
+            <div className="mt-2 max-h-64 overflow-y-auto rounded-xl border border-border divide-y divide-border">
+              {productResults.map((p, idx) => (
+                <div
+                  key={`${p.location}-${p.sku}-${p.batch}-${idx}`}
+                  className="flex items-center justify-between px-3 py-2 bg-white hover:bg-gray-50 transition"
+                >
+                  <div className="flex-1 min-w-0 mr-2">
+                    <p className="text-xs font-semibold text-text-primary truncate">{p.productName}</p>
+                    <p className="text-[10px] text-text-secondary">
+                      SKU: {p.sku}{p.batch ? ` · Batch: ${p.batch}` : ""}
+                    </p>
+                    <p className="text-[10px] text-primary font-medium">📍 {p.location}</p>
+                  </div>
+                  <button
+                    onClick={() => openQuickMove({ location: p.location, sku: p.sku, batch: p.batch, productName: p.productName })}
+                    className="flex-shrink-0 px-2.5 py-1.5 bg-amber-500 text-white text-[10px] font-semibold rounded-lg hover:bg-amber-600 active:scale-95 transition"
+                  >
+                    Pindah
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {showProductResults && productResults.length === 0 && !productSearchLoading && productQuery.trim().length >= 2 && (
+            <p className="mt-2 text-xs text-text-secondary text-center py-2">Produk tidak ditemukan</p>
+          )}
+        </div>
+
+        {/* ── Quick Move Modal ── */}
+        {moveItem && (
+          <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setMoveItem(null)}>
+            <div ref={quickMoveRef} className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-base font-bold text-text-primary">Pindah Produk</h3>
+                <button onClick={() => setMoveItem(null)} className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-500">✕</button>
+              </div>
+
+              {/* Product info */}
+              <div className="bg-gray-50 rounded-xl p-3 mb-4">
+                <p className="text-sm font-semibold text-text-primary">{moveItem.productName}</p>
+                <p className="text-xs text-text-secondary mt-0.5">SKU: {moveItem.sku}{moveItem.batch ? ` · Batch: ${moveItem.batch}` : ""}</p>
+                <p className="text-xs text-primary font-medium mt-1">📍 Dari: {moveItem.location}</p>
+              </div>
+
+              {/* Target location */}
+              <label className="block text-sm font-semibold text-text-primary mb-1">Lokasi Tujuan</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={quickMoveTarget}
+                  onChange={(e) => handleQuickMoveLocSearch(e.target.value)}
+                  onFocus={() => { if (quickMoveSuggestions.length > 0) setShowQuickMoveSuggestions(true); }}
+                  className="w-full px-4 py-2.5 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 uppercase text-sm"
+                  placeholder="Ketik lokasi tujuan..."
+                  autoComplete="off"
+                />
+                {showQuickMoveSuggestions && quickMoveSuggestions.length > 0 && (
+                  <div className="absolute z-10 left-0 right-0 mt-1 bg-white border border-border rounded-xl shadow-lg max-h-40 overflow-y-auto">
+                    {quickMoveSuggestions.map(loc => (
+                      <button
+                        key={loc.locationCode}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => { setQuickMoveTarget(loc.locationCode); setShowQuickMoveSuggestions(false); }}
+                        className="w-full text-left px-3 py-2 hover:bg-amber-50 transition border-b border-border last:border-b-0 text-sm"
+                      >
+                        <span className="font-medium">{loc.locationCode}</span>
+                        <span className="text-xs text-text-secondary ml-2">({loc.productCount} produk)</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex gap-3 mt-5">
+                <button
+                  onClick={() => setMoveItem(null)}
+                  className="flex-1 py-2.5 bg-gray-100 text-text-primary text-sm font-semibold rounded-xl hover:bg-gray-200 transition"
+                >
+                  Batal
+                </button>
+                <button
+                  onClick={executeQuickMove}
+                  disabled={!quickMoveTarget.trim() || quickMoving}
+                  className="flex-1 py-2.5 bg-amber-500 text-white text-sm font-semibold rounded-xl hover:bg-amber-600 disabled:opacity-50 transition flex items-center justify-center gap-2"
+                >
+                  {quickMoving ? (
+                    <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Memindah...</>
+                  ) : "Pindahkan"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Scan Terakhir (compact table) ── */}
         {stats.recentScans.length > 0 && (

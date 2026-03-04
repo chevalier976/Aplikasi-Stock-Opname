@@ -118,6 +118,7 @@ function doPost(e) {
       case "getAllLocations":  result = getAllLocations(); break;
       case "getAllProducts":   result = getAllProducts(); break;
       case "moveProducts":    result = moveProducts(data); break;
+      case "searchProductsGlobal": result = searchProductsGlobal(data.query); break;
       default:                result = { success: false, message: "Unknown action" };
     }
 
@@ -556,6 +557,40 @@ function getAllProducts() {
   }
   var resp = { success: true, products: products };
   cachePut(ck, resp, 60);
+  return resp;
+}
+
+// ──────────────────────────────────────────────────────────────
+// SEARCH PRODUCTS GLOBAL — with location info for cross-location search
+// ──────────────────────────────────────────────────────────────
+
+function searchProductsGlobal(query) {
+  var q = normalizeText(query).toLowerCase();
+  if (!q || q.length < 2) return { success: true, products: [] };
+
+  var ck = cacheKey("spg", q);
+  var cached = cacheGet(ck);
+  if (cached) return cached;
+
+  var data = readMasterData();
+  var results = [];
+  for (var i = 1; i < data.length; i++) {
+    var name = String(data[i][1]).toLowerCase();
+    var sku = String(data[i][2]).toLowerCase();
+    var batch = String(data[i][3] || "").toLowerCase();
+    if (name.indexOf(q) !== -1 || sku.indexOf(q) !== -1 || batch.indexOf(q) !== -1) {
+      results.push({
+        location: String(data[i][0]).trim(),
+        productName: data[i][1],
+        sku: data[i][2],
+        batch: String(data[i][3] || ""),
+        barcode: data[i][4] || ""
+      });
+      if (results.length >= 30) break;
+    }
+  }
+  var resp = { success: true, products: results };
+  cachePut(ck, resp, CACHE_TTL);
   return resp;
 }
 
