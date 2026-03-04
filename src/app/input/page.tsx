@@ -43,6 +43,7 @@ function InputPageContent() {
   // Inline batch editing
   const [editingBatchKey, setEditingBatchKey] = useState<string | null>(null);
   const [editingBatchValue, setEditingBatchValue] = useState("");
+  const [editingBatchSku, setEditingBatchSku] = useState("");
   // Batch dropdown (add form)
   const [showBatchDropdown, setShowBatchDropdown] = useState(false);
   const batchDropdownRef = useRef<HTMLDivElement>(null);
@@ -86,28 +87,23 @@ function InputPageContent() {
 
   // Get unique batches for inline batch edit SKU
   const inlineBatchesForSku = useMemo(() => {
-    if (!editingBatchKey) return [];
-    // Extract SKU from editingBatchKey format: "existing-{sku}-{batch}" or "new-{sku}-{batch}"
-    const allProds = [...products, ...newProducts];
-    const match = editingBatchKey.match(/^(?:existing|new)-(.+)-(.*)$/);
-    if (!match) return [];
-    const editSku = match[1].trim().toLowerCase();
-    if (!editSku) return [];
+    const sku = String(editingBatchSku || "").trim().toLowerCase();
+    if (!sku) return [];
     const all = allProductsRef.current || [];
     const batchSet = new Set<string>();
     all.forEach((p) => {
-      if (p.sku.trim().toLowerCase() === editSku && p.batch) {
-        batchSet.add(p.batch);
+      if (String(p.sku).trim().toLowerCase() === sku && p.batch) {
+        batchSet.add(String(p.batch));
       }
     });
     // Also include batches from loaded products for current location
-    allProds.forEach((p) => {
-      if (p.sku.trim().toLowerCase() === editSku && p.batch) {
-        batchSet.add(p.batch);
+    [...products, ...newProducts].forEach((p) => {
+      if (String(p.sku).trim().toLowerCase() === sku && p.batch) {
+        batchSet.add(String(p.batch));
       }
     });
     return Array.from(batchSet).sort();
-  }, [editingBatchKey, products, newProducts]);
+  }, [editingBatchSku, products, newProducts]);
 
   // Filtered batches for inline edit
   const inlineFilteredBatches = useMemo(() => {
@@ -416,9 +412,10 @@ function InputPageContent() {
     toast.success("Produk baru berhasil ditambahkan");
   };
 
-  const handleBatchEdit = (key: string, currentBatch: string) => {
+  const handleBatchEdit = (key: string, currentBatch: string, sku: string) => {
     setEditingBatchKey(key);
-    setEditingBatchValue(currentBatch);
+    setEditingBatchValue(String(currentBatch));
+    setEditingBatchSku(sku);
     setShowInlineBatchDropdown(true);
   };
 
@@ -426,6 +423,7 @@ function InputPageContent() {
     const newBatch = editingBatchValue.trim();
     setEditingBatchKey(null);
     setEditingBatchValue("");
+    setEditingBatchSku("");
     setShowInlineBatchDropdown(false);
     if (newBatch === oldBatch) return; // no change
 
@@ -864,42 +862,42 @@ function InputPageContent() {
                       <td className="px-2 py-2 text-text-secondary whitespace-nowrap">
                         <div className="relative" ref={editingBatchKey === `existing-${product.sku}-${product.batch}` ? inlineBatchDropdownRef : undefined}>
                         {editingBatchKey === `existing-${product.sku}-${product.batch}` ? (
-                          <div>
-                            <span className="flex items-center gap-1">
-                              <input type="text" value={editingBatchValue} onChange={(e) => { setEditingBatchValue(e.target.value); setShowInlineBatchDropdown(true); }}
-                                onKeyDown={(e) => { if (e.key === 'Enter') handleBatchSave(product.sku, product.batch, false); if (e.key === 'Escape') { setEditingBatchKey(null); setShowInlineBatchDropdown(false); } }}
-                                className="w-16 px-1.5 py-0.5 border border-primary rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary pr-5" autoFocus />
+                          <div className="relative">
+                            <div className="flex items-center">
+                              <input type="text" value={editingBatchValue}
+                                onChange={(e) => { setEditingBatchValue(e.target.value); setShowInlineBatchDropdown(true); }}
+                                onKeyDown={(e) => { if (e.key === 'Enter') handleBatchSave(product.sku, product.batch, false); if (e.key === 'Escape') { setEditingBatchKey(null); setEditingBatchSku(""); setShowInlineBatchDropdown(false); } }}
+                                onBlur={() => { setTimeout(() => { if (!inlineBatchDropdownRef.current?.contains(document.activeElement)) handleBatchSave(product.sku, product.batch, false); }, 200); }}
+                                className="w-20 pl-1.5 pr-6 py-0.5 border border-primary rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary" autoFocus />
                               {inlineBatchesForSku.length > 0 && (
                                 <button type="button" onClick={() => setShowInlineBatchDropdown(!showInlineBatchDropdown)}
-                                  className="absolute right-12 top-1/2 -translate-y-1/2 text-text-secondary hover:text-primary p-0.5">
+                                  className="absolute right-0.5 top-1/2 -translate-y-1/2 text-text-secondary hover:text-primary p-0.5">
                                   <svg className={`w-3 h-3 transition-transform ${showInlineBatchDropdown ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
                                 </button>
                               )}
-                              <button onClick={() => handleBatchSave(product.sku, product.batch, false)} className="text-primary hover:text-primary-dark text-xs" title="Simpan">✓</button>
-                              <button onClick={() => { setEditingBatchKey(null); setShowInlineBatchDropdown(false); }} className="text-accent-red hover:text-red-700 text-xs" title="Batal">✕</button>
-                            </span>
+                            </div>
                             {showInlineBatchDropdown && inlineBatchesForSku.length > 0 && (
-                              <div className="absolute z-30 left-0 mt-1 w-36 bg-white border border-border rounded-lg shadow-lg overflow-hidden">
-                                <div className="max-h-32 overflow-y-auto">
+                              <div className="absolute z-30 left-0 top-full mt-1 w-40 bg-white border border-border rounded-lg shadow-lg overflow-hidden">
+                                <div className="max-h-36 overflow-y-auto">
                                   {inlineFilteredBatches.map((b) => (
                                     <button key={b} type="button" onMouseDown={(e) => e.preventDefault()}
                                       onClick={() => { setEditingBatchValue(b); setShowInlineBatchDropdown(false); }}
-                                      className={`w-full text-left px-2 py-1.5 text-[11px] hover:bg-primary-pale/50 transition border-b border-border last:border-b-0 ${editingBatchValue === b ? "bg-primary/10 text-primary font-semibold" : "text-text-primary"}`}>
+                                      className={`w-full text-left px-2.5 py-1.5 text-[11px] hover:bg-primary-pale/50 transition border-b border-border last:border-b-0 ${editingBatchValue === b ? "bg-primary/10 text-primary font-semibold" : "text-text-primary"}`}>
                                       {b}
                                     </button>
                                   ))}
                                 </div>
                                 {editingBatchValue.trim() && !inlineBatchesForSku.includes(editingBatchValue.trim()) && (
-                                  <div className="border-t border-border px-2 py-1.5 bg-gray-50">
+                                  <div className="border-t border-border px-2.5 py-1.5 bg-green-50">
                                     <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => setShowInlineBatchDropdown(false)}
-                                      className="text-[10px] text-primary font-medium hover:underline">+ &quot;{editingBatchValue.trim()}&quot; batch baru</button>
+                                      className="text-[10px] text-green-700 font-medium">+ Batch baru: &quot;{editingBatchValue.trim()}&quot;</button>
                                   </div>
                                 )}
                               </div>
                             )}
                           </div>
                         ) : (
-                          <span className="flex items-center gap-1 group cursor-pointer" onClick={() => handleBatchEdit(`existing-${product.sku}-${product.batch}`, product.batch)}>
+                          <span className="flex items-center gap-1 group cursor-pointer" onClick={() => handleBatchEdit(`existing-${product.sku}-${product.batch}`, product.batch, product.sku)}>
                             <span className="text-[11px]">{product.batch}</span>
                             <span className="text-[10px] text-text-secondary opacity-0 group-hover:opacity-100 transition">✏️</span>
                           </span>
@@ -927,42 +925,42 @@ function InputPageContent() {
                       <td className="px-2 py-2 text-text-secondary whitespace-nowrap">
                         <div className="relative" ref={editingBatchKey === `new-${product.sku}-${product.batch}` ? inlineBatchDropdownRef : undefined}>
                         {editingBatchKey === `new-${product.sku}-${product.batch}` ? (
-                          <div>
-                            <span className="flex items-center gap-1">
-                              <input type="text" value={editingBatchValue} onChange={(e) => { setEditingBatchValue(e.target.value); setShowInlineBatchDropdown(true); }}
-                                onKeyDown={(e) => { if (e.key === 'Enter') handleBatchSave(product.sku, product.batch, true); if (e.key === 'Escape') { setEditingBatchKey(null); setShowInlineBatchDropdown(false); } }}
-                                className="w-16 px-1.5 py-0.5 border border-primary rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary pr-5" autoFocus />
+                          <div className="relative">
+                            <div className="flex items-center">
+                              <input type="text" value={editingBatchValue}
+                                onChange={(e) => { setEditingBatchValue(e.target.value); setShowInlineBatchDropdown(true); }}
+                                onKeyDown={(e) => { if (e.key === 'Enter') handleBatchSave(product.sku, product.batch, true); if (e.key === 'Escape') { setEditingBatchKey(null); setEditingBatchSku(""); setShowInlineBatchDropdown(false); } }}
+                                onBlur={() => { setTimeout(() => { if (!inlineBatchDropdownRef.current?.contains(document.activeElement)) handleBatchSave(product.sku, product.batch, true); }, 200); }}
+                                className="w-20 pl-1.5 pr-6 py-0.5 border border-primary rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary" autoFocus />
                               {inlineBatchesForSku.length > 0 && (
                                 <button type="button" onClick={() => setShowInlineBatchDropdown(!showInlineBatchDropdown)}
-                                  className="absolute right-12 top-1/2 -translate-y-1/2 text-text-secondary hover:text-primary p-0.5">
+                                  className="absolute right-0.5 top-1/2 -translate-y-1/2 text-text-secondary hover:text-primary p-0.5">
                                   <svg className={`w-3 h-3 transition-transform ${showInlineBatchDropdown ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
                                 </button>
                               )}
-                              <button onClick={() => handleBatchSave(product.sku, product.batch, true)} className="text-primary hover:text-primary-dark text-xs" title="Simpan">✓</button>
-                              <button onClick={() => { setEditingBatchKey(null); setShowInlineBatchDropdown(false); }} className="text-accent-red hover:text-red-700 text-xs" title="Batal">✕</button>
-                            </span>
+                            </div>
                             {showInlineBatchDropdown && inlineBatchesForSku.length > 0 && (
-                              <div className="absolute z-30 left-0 mt-1 w-36 bg-white border border-border rounded-lg shadow-lg overflow-hidden">
-                                <div className="max-h-32 overflow-y-auto">
+                              <div className="absolute z-30 left-0 top-full mt-1 w-40 bg-white border border-border rounded-lg shadow-lg overflow-hidden">
+                                <div className="max-h-36 overflow-y-auto">
                                   {inlineFilteredBatches.map((b) => (
                                     <button key={b} type="button" onMouseDown={(e) => e.preventDefault()}
                                       onClick={() => { setEditingBatchValue(b); setShowInlineBatchDropdown(false); }}
-                                      className={`w-full text-left px-2 py-1.5 text-[11px] hover:bg-primary-pale/50 transition border-b border-border last:border-b-0 ${editingBatchValue === b ? "bg-primary/10 text-primary font-semibold" : "text-text-primary"}`}>
+                                      className={`w-full text-left px-2.5 py-1.5 text-[11px] hover:bg-primary-pale/50 transition border-b border-border last:border-b-0 ${editingBatchValue === b ? "bg-primary/10 text-primary font-semibold" : "text-text-primary"}`}>
                                       {b}
                                     </button>
                                   ))}
                                 </div>
                                 {editingBatchValue.trim() && !inlineBatchesForSku.includes(editingBatchValue.trim()) && (
-                                  <div className="border-t border-border px-2 py-1.5 bg-gray-50">
+                                  <div className="border-t border-border px-2.5 py-1.5 bg-green-50">
                                     <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => setShowInlineBatchDropdown(false)}
-                                      className="text-[10px] text-primary font-medium hover:underline">+ &quot;{editingBatchValue.trim()}&quot; batch baru</button>
+                                      className="text-[10px] text-green-700 font-medium">+ Batch baru: &quot;{editingBatchValue.trim()}&quot;</button>
                                   </div>
                                 )}
                               </div>
                             )}
                           </div>
                         ) : (
-                          <span className="flex items-center gap-1 group cursor-pointer" onClick={() => handleBatchEdit(`new-${product.sku}-${product.batch}`, product.batch)}>
+                          <span className="flex items-center gap-1 group cursor-pointer" onClick={() => handleBatchEdit(`new-${product.sku}-${product.batch}`, product.batch, product.sku)}>
                             <span className="text-[11px]">{product.batch}</span>
                             <span className="text-[10px] text-text-secondary opacity-0 group-hover:opacity-100 transition">✏️</span>
                           </span>
