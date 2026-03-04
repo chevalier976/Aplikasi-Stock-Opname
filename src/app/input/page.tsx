@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, Suspense } from "react";
+import { useState, useEffect, useRef, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import BottomNav from "@/components/BottomNav";
@@ -43,11 +43,52 @@ function InputPageContent() {
   // Inline batch editing
   const [editingBatchKey, setEditingBatchKey] = useState<string | null>(null);
   const [editingBatchValue, setEditingBatchValue] = useState("");
+  // Batch dropdown
+  const [showBatchDropdown, setShowBatchDropdown] = useState(false);
+  const batchDropdownRef = useRef<HTMLDivElement>(null);
 
   // Unique key per product row: SKU + batch combination
   const productKey = (sku: string, batch: string) => `${sku}__${batch}`;
   // All products cached locally for instant client-side search
   const allProductsRef = useRef<Product[] | null>(null);
+
+  // Get unique batches for current SKU from allProducts
+  const batchesForSku = useMemo(() => {
+    const sku = newProductForm.sku.trim().toLowerCase();
+    if (!sku) return [];
+    const all = allProductsRef.current || [];
+    const batchSet = new Set<string>();
+    all.forEach((p) => {
+      if (p.sku.trim().toLowerCase() === sku && p.batch) {
+        batchSet.add(p.batch);
+      }
+    });
+    // Also include batches from loaded products for current location
+    products.forEach((p) => {
+      if (p.sku.trim().toLowerCase() === sku && p.batch) {
+        batchSet.add(p.batch);
+      }
+    });
+    return Array.from(batchSet).sort();
+  }, [newProductForm.sku, products]);
+
+  // Filtered batches based on current input
+  const filteredBatches = useMemo(() => {
+    const q = newProductForm.batch.trim().toLowerCase();
+    if (!q) return batchesForSku;
+    return batchesForSku.filter((b) => b.toLowerCase().includes(q));
+  }, [newProductForm.batch, batchesForSku]);
+
+  // Close batch dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (batchDropdownRef.current && !batchDropdownRef.current.contains(e.target as Node)) {
+        setShowBatchDropdown(false);
+      }
+    };
+    if (showBatchDropdown) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showBatchDropdown]);
 
   useEffect(() => {
     warmupCacheApi().catch(() => {});
@@ -601,10 +642,71 @@ function InputPageContent() {
               </div>
 
               {/* Batch */}
-              <div>
+              <div ref={batchDropdownRef} className="relative">
                 <label className="block text-xs font-medium text-text-primary mb-1">Batch</label>
-                <input type="text" value={newProductForm.batch} onChange={(e) => setNewProductForm({ ...newProductForm, batch: e.target.value })}
-                  className="w-full px-3 py-2.5 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-sm" placeholder="Masukkan batch" />
+                <div className="relative">
+                  <input type="text" value={newProductForm.batch}
+                    onChange={(e) => {
+                      setNewProductForm({ ...newProductForm, batch: e.target.value });
+                      setShowBatchDropdown(true);
+                    }}
+                    onFocus={() => { if (newProductForm.sku.trim()) setShowBatchDropdown(true); }}
+                    className="w-full px-3 py-2.5 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-sm pr-8"
+                    placeholder={batchesForSku.length > 0 ? "Pilih atau ketik batch baru..." : "Masukkan batch"}
+                  />
+                  {batchesForSku.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowBatchDropdown(!showBatchDropdown)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-text-secondary hover:text-primary p-0.5"
+                    >
+                      <svg className={`w-4 h-4 transition-transform ${showBatchDropdown ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path d="M6 9l6 6 6-6" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+                {/* Batch dropdown */}
+                {showBatchDropdown && newProductForm.sku.trim() && (
+                  <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-border rounded-xl shadow-lg overflow-hidden">
+                    {filteredBatches.length > 0 ? (
+                      <div className="max-h-40 overflow-y-auto">
+                        {filteredBatches.map((batch) => (
+                          <button
+                            key={batch}
+                            type="button"
+                            onClick={() => {
+                              setNewProductForm({ ...newProductForm, batch });
+                              setShowBatchDropdown(false);
+                            }}
+                            className={`w-full text-left px-3 py-2 text-sm hover:bg-primary-pale/50 transition border-b border-border last:border-b-0 ${
+                              newProductForm.batch === batch ? "bg-primary/10 text-primary font-semibold" : "text-text-primary"
+                            }`}
+                          >
+                            {batch}
+                          </button>
+                        ))}
+                      </div>
+                    ) : newProductForm.batch.trim() ? (
+                      <div className="px-3 py-2 text-xs text-text-secondary">
+                        <span className="text-primary font-medium">&quot;{newProductForm.batch.trim()}&quot;</span> — batch baru
+                      </div>
+                    ) : (
+                      <div className="px-3 py-2 text-xs text-text-secondary">Tidak ada batch untuk SKU ini</div>
+                    )}
+                    {newProductForm.batch.trim() && !batchesForSku.includes(newProductForm.batch.trim()) && filteredBatches.length > 0 && (
+                      <div className="border-t border-border px-3 py-2 bg-gray-50">
+                        <button
+                          type="button"
+                          onClick={() => setShowBatchDropdown(false)}
+                          className="text-xs text-primary font-medium hover:underline"
+                        >
+                          + Gunakan &quot;{newProductForm.batch.trim()}&quot; sebagai batch baru
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Qty */}
