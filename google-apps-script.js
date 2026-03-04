@@ -106,7 +106,7 @@ function doPost(e) {
       case "login":           result = login(data.email, data.password); break;
       case "getProducts":     result = getProducts(data.locationCode); break;
       case "saveStockOpname": result = saveStockOpname(data); break;
-      case "getHistory":      result = getHistory(data.operator, data.filter); break;
+      case "getHistory":      result = getHistory(data.operator, data.filter, data.allOperators); break;
       case "updateEntry":     result = updateEntry(data); break;
       case "deleteProduct":   result = deleteProduct(data.locationCode, data.sku, data.batch); break;
       case "deleteEntry":     result = deleteEntry(data.rowId); break;
@@ -232,19 +232,19 @@ function searchLocations(query, preloadedData) {
   return resp;
 }
 
-function getHistory(operator, filter) {
-  var ck = cacheKey("gh", operator + "|" + (filter || "all"));
+function getHistory(operator, filter, allOperators) {
+  var ck = cacheKey("gh", (allOperators ? "ALL" : operator) + "|" + (filter || "all"));
   var cached = cacheGet(ck);
   if (cached) return cached;
 
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Stock Opname Results");
   var data = sheet.getDataRange().getValues();
   var history = [];
-  var operatorName = getOperatorName(operator);
+  var operatorName = allOperators ? null : getOperatorName(operator);
   var now = new Date();
 
   for (var i = 1; i < data.length; i++) {
-    if (data[i][3] !== operatorName) continue;
+    if (!allOperators && data[i][3] !== operatorName) continue;
     var ts = new Date(data[i][2]);
     var valid = !isNaN(ts.getTime());
     if (valid) {

@@ -173,9 +173,10 @@ export const saveStockOpnameApi = async (
 
 export const getHistoryApi = async (
   operator: string,
-  filter?: string
+  filter?: string,
+  allOperators?: boolean
 ): Promise<{ success: boolean; history?: HistoryEntry[]; message?: string }> => {
-  return apiCall("getHistory", { operator, filter });
+  return apiCall("getHistory", { operator, filter, allOperators: !!allOperators });
 };
 
 export const updateEntryApi = async (

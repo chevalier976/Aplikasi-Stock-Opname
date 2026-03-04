@@ -25,6 +25,7 @@ export default function HistoryPage() {
   const [filterDate, setFilterDate] = useState("");   // "YYYY-MM-DD"
   const [selectedLocations, setSelectedLocations] = useState<Set<string>>(new Set());
   const [showLocationFilter, setShowLocationFilter] = useState(false);
+  const [viewAllOperators, setViewAllOperators] = useState(false);
   const locationFilterRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -80,12 +81,12 @@ export default function HistoryPage() {
       }
     }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user, viewAllOperators]);
 
   const fetchHistory = async () => {
     if (!user) return;
 
-    const ck = `history:${user.email}:all`;
+    const ck = viewAllOperators ? `history:ALL:all` : `history:${user.email}:all`;
 
     // Show cached data instantly (includes optimistic entries from save)
     const cached = getCache<HistoryEntry[]>(ck);
@@ -104,7 +105,7 @@ export default function HistoryPage() {
 
     // Background refresh
     try {
-      const result = await getHistoryApi(user.email);
+      const result = await getHistoryApi(user.email, undefined, viewAllOperators);
 
       if (result.success && result.history) {
         setHistory(result.history);
@@ -677,6 +678,39 @@ export default function HistoryPage() {
           </div>
         </div>
 
+        {/* ── Data Scope Toggle ── */}
+        <div className="mb-3 flex items-center bg-white rounded-xl shadow-card border border-border p-1">
+          <button
+            type="button"
+            onClick={() => setViewAllOperators(false)}
+            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition ${
+              !viewAllOperators
+                ? "bg-primary text-white shadow-sm"
+                : "text-text-secondary hover:text-text-primary"
+            }`}
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" /><circle cx="12" cy="7" r="4" />
+            </svg>
+            Data Saya
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewAllOperators(true)}
+            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition ${
+              viewAllOperators
+                ? "bg-primary text-white shadow-sm"
+                : "text-text-secondary hover:text-text-primary"
+            }`}
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
+            </svg>
+            Semua Data
+          </button>
+        </div>
+
         {/* ── Location Filter + Date Filter + Counter ── */}
         <div className="mb-3 flex items-center gap-2 flex-wrap">
           {/* Location filter dropdown */}
@@ -1016,12 +1050,17 @@ export default function HistoryPage() {
                 <div className="space-y-2 ml-1">
                   {entries.map((entry) => (
                     <div key={entry.rowId} className="bg-white rounded-xl shadow-card border border-border p-3">
-                      {/* Row 1: Product Name */}
+                      {/* Row 1: Product Name + Operator badge */}
                       <div className="flex items-start gap-2 mb-1.5">
                         <p className="text-[11px] font-medium text-text-primary leading-tight flex-1">
                           {entry.productName}
                           {entry.edited === "Yes" && <span className="ml-0.5 text-[10px] text-accent-yellow" title={`Diedit: ${entry.editTimestamp}`}>✏️</span>}
                         </p>
+                        {viewAllOperators && entry.operator && (
+                          <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-[9px] font-semibold rounded flex-shrink-0">
+                            {entry.operator}
+                          </span>
+                        )}
                       </div>
                       {/* Row 2: Batch | Qty | Actions */}
                       <div className="flex items-center gap-2">
