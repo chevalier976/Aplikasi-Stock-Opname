@@ -397,7 +397,7 @@ function syncMasterDataInternal(locationCode, items) {
   var existing = {};
   for (var i = 1; i < data.length; i++) {
     if (normalizeLocation(data[i][0]) === loc) {
-      var key = normalizeText(data[i][2]) + "||" + normalizeText(data[i][3]);
+      var key = normalizeText(String(data[i][2])) + "||" + normalizeText(String(data[i][3]));
       existing[key] = true;
     }
   }
@@ -429,8 +429,8 @@ function updateEntry(data) {
         // Capture OLD values before updating (for Master Data sync)
         var oldLocation = normalizeLocation(values[i][4]);
         var oldProductName = normalizeText(values[i][5]);
-        var oldSku = normalizeText(values[i][6]);
-        var oldBatch = normalizeText(values[i][7]);
+        var oldSku = normalizeText(String(values[i][6]));
+        var oldBatch = normalizeText(String(values[i][7]));
 
         var row = values[i].slice();
         if (data.productName !== undefined) row[5] = data.productName;
@@ -452,8 +452,8 @@ function updateEntry(data) {
           var mdData = mdSheet.getDataRange().getValues();
           for (var j = 1; j < mdData.length; j++) {
             if (normalizeLocation(mdData[j][0]) === oldLocation &&
-                normalizeText(mdData[j][2]) === oldSku &&
-                normalizeText(mdData[j][3]) === oldBatch) {
+                normalizeText(String(mdData[j][2])) === oldSku &&
+                normalizeText(String(mdData[j][3])) === oldBatch) {
               // Update the Master Data row with new values
               mdSheet.getRange(j + 1, 2).setValue(newProductName); // col B = Product Name
               mdSheet.getRange(j + 1, 3).setValue(newSku);         // col C = SKU
@@ -480,8 +480,8 @@ function deleteEntry(rowId) {
       if (values[i][1] === rowId) {
         // Capture product info before deleting the row
         var location = normalizeLocation(values[i][4]);
-        var sku = normalizeText(values[i][6]);
-        var batch = normalizeText(values[i][7]);
+        var sku = normalizeText(String(values[i][6]));
+        var batch = normalizeText(String(values[i][7]));
 
         // Delete from Stock Opname Results
         sheet.deleteRow(i + 1);
@@ -492,8 +492,8 @@ function deleteEntry(rowId) {
           var mdData = mdSheet.getDataRange().getValues();
           for (var j = mdData.length - 1; j >= 1; j--) {
             if (normalizeLocation(mdData[j][0]) === location &&
-                normalizeText(mdData[j][2]) === sku &&
-                normalizeText(mdData[j][3]) === batch) {
+                normalizeText(String(mdData[j][2])) === sku &&
+                normalizeText(String(mdData[j][3])) === batch) {
               mdSheet.deleteRow(j + 1);
               break; // Only delete the exact match
             }

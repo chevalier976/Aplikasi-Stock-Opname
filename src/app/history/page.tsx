@@ -252,7 +252,7 @@ export default function HistoryPage() {
     setHistory(updated);
     toast.success("Entry berhasil dihapus");
 
-    const ck = `history:${user?.email}:all`;
+    const ck = `history:ALL:all`;
     setCache(ck, updated);
     clearCache("products:"); // invalidate product cache
 
@@ -297,7 +297,7 @@ export default function HistoryPage() {
     setIsModalOpen(false);
     toast.success("Berhasil mengupdate entry");
 
-    const ck = `history:${user?.email}:all`;
+    const ck = `history:ALL:all`;
     setCache(ck, updated);
 
     // Background sync ke server
@@ -350,7 +350,7 @@ export default function HistoryPage() {
     setHistory(updated);
     toast.success("Batch berhasil diupdate");
 
-    const ck = `history:${user?.email}:all`;
+    const ck = `history:ALL:all`;
     setCache(ck, updated);
 
     try {
@@ -397,7 +397,7 @@ export default function HistoryPage() {
     setHistory(updated);
     toast.success("Qty berhasil diupdate");
 
-    const ck = `history:${user?.email}:all`;
+    const ck = `history:ALL:all`;
     setCache(ck, updated);
 
     try {
@@ -583,7 +583,7 @@ export default function HistoryPage() {
       formula: addFormula || "",
     };
     setHistory((prev) => [newEntry, ...prev]);
-    const ck = `history:${user?.email}:all`;
+    const ck = `history:ALL:all`;
     setCache(ck, [newEntry, ...history]);
 
     // Reset form immediately
