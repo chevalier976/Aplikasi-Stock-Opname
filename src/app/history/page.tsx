@@ -84,6 +84,8 @@ export default function HistoryPage() {
   const addFilteredBatches = useMemo(() => {
     const q = addForm.batch.trim().toLowerCase();
     if (!q) return addBatchesForSku;
+    // If current value exactly matches an existing batch, show ALL batches so user can switch
+    if (addBatchesForSku.some((b) => b.toLowerCase() === q)) return addBatchesForSku;
     return addBatchesForSku.filter((b) => b.toLowerCase().includes(q));
   }, [addForm.batch, addBatchesForSku]);
 
@@ -108,6 +110,8 @@ export default function HistoryPage() {
   const inlineFilteredBatches = useMemo(() => {
     const q = editingBatchValue.trim().toLowerCase();
     if (!q) return inlineBatchesForSku;
+    // If current value exactly matches an existing batch, show ALL batches so user can switch
+    if (inlineBatchesForSku.some((b) => b.toLowerCase() === q)) return inlineBatchesForSku;
     return inlineBatchesForSku.filter((b) => b.toLowerCase().includes(q));
   }, [editingBatchValue, inlineBatchesForSku]);
 

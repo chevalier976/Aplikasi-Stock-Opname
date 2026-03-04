@@ -60,6 +60,8 @@ export default function EditModal({
   const filteredBatches = useMemo(() => {
     const q = batch.trim().toLowerCase();
     if (!q) return batchesForSku;
+    // If current value exactly matches an existing batch, show ALL batches so user can switch
+    if (batchesForSku.some((b) => b.toLowerCase() === q)) return batchesForSku;
     return batchesForSku.filter((b) => b.toLowerCase().includes(q));
   }, [batch, batchesForSku]);
 
