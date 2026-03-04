@@ -58,6 +58,81 @@ export default function HistoryPage() {
     qty: 0,
   });
 
+  // ── Batch dropdown state (add form) ──
+  const [showAddBatchDropdown, setShowAddBatchDropdown] = useState(false);
+  const addBatchDropdownRef = useRef<HTMLDivElement>(null);
+
+  // ── Batch dropdown state (inline edit) ──
+  const [showInlineBatchDropdown, setShowInlineBatchDropdown] = useState(false);
+  const inlineBatchDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Get unique batches for add form SKU
+  const addBatchesForSku = useMemo(() => {
+    const skuVal = addForm.sku.trim().toLowerCase();
+    if (!skuVal) return [];
+    const all = allProductsRef.current || [];
+    const batchSet = new Set<string>();
+    all.forEach((p) => {
+      if (p.sku.trim().toLowerCase() === skuVal && p.batch) {
+        batchSet.add(p.batch);
+      }
+    });
+    return Array.from(batchSet).sort();
+  }, [addForm.sku]);
+
+  // Filtered batches for add form
+  const addFilteredBatches = useMemo(() => {
+    const q = addForm.batch.trim().toLowerCase();
+    if (!q) return addBatchesForSku;
+    return addBatchesForSku.filter((b) => b.toLowerCase().includes(q));
+  }, [addForm.batch, addBatchesForSku]);
+
+  // Get unique batches for inline batch edit SKU
+  const inlineBatchesForSku = useMemo(() => {
+    if (!editingBatch) return [];
+    const entry = history.find((e) => e.rowId === editingBatch);
+    if (!entry) return [];
+    const skuVal = entry.sku.trim().toLowerCase();
+    if (!skuVal) return [];
+    const all = allProductsRef.current || [];
+    const batchSet = new Set<string>();
+    all.forEach((p) => {
+      if (p.sku.trim().toLowerCase() === skuVal && p.batch) {
+        batchSet.add(p.batch);
+      }
+    });
+    return Array.from(batchSet).sort();
+  }, [editingBatch, history]);
+
+  // Filtered batches for inline edit
+  const inlineFilteredBatches = useMemo(() => {
+    const q = editingBatchValue.trim().toLowerCase();
+    if (!q) return inlineBatchesForSku;
+    return inlineBatchesForSku.filter((b) => b.toLowerCase().includes(q));
+  }, [editingBatchValue, inlineBatchesForSku]);
+
+  // Close add form batch dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (addBatchDropdownRef.current && !addBatchDropdownRef.current.contains(e.target as Node)) {
+        setShowAddBatchDropdown(false);
+      }
+    };
+    if (showAddBatchDropdown) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showAddBatchDropdown]);
+
+  // Close inline batch dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (inlineBatchDropdownRef.current && !inlineBatchDropdownRef.current.contains(e.target as Node)) {
+        setShowInlineBatchDropdown(false);
+      }
+    };
+    if (showInlineBatchDropdown) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showInlineBatchDropdown]);
+
   useEffect(() => {
     fetchHistory();
     warmupCacheApi().catch(() => {});
@@ -333,11 +408,13 @@ export default function HistoryPage() {
   const startInlineBatchEdit = (entry: HistoryEntry) => {
     setEditingBatch(entry.rowId);
     setEditingBatchValue(entry.batch);
+    setShowInlineBatchDropdown(true);
   };
 
   const saveInlineBatch = async (entry: HistoryEntry) => {
     const newBatch = editingBatchValue.trim();
     setEditingBatch(null);
+    setShowInlineBatchDropdown(false);
     if (newBatch === entry.batch) return; // no change
 
     const editTimestamp = new Date().toISOString();
@@ -941,10 +1018,63 @@ export default function HistoryPage() {
               </div>
 
               {/* Batch */}
-              <div>
+              <div ref={addBatchDropdownRef} className="relative">
                 <label className="block text-xs font-medium text-text-primary mb-1">Batch</label>
-                <input type="text" value={addForm.batch} onChange={(e) => setAddForm({ ...addForm, batch: e.target.value })}
-                  className="w-full px-3 py-2.5 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-sm" placeholder="Masukkan batch" />
+                <div className="relative">
+                  <input type="text" value={addForm.batch}
+                    onChange={(e) => { setAddForm({ ...addForm, batch: e.target.value }); setShowAddBatchDropdown(true); }}
+                    onFocus={() => { if (addForm.sku.trim()) setShowAddBatchDropdown(true); }}
+                    className="w-full px-3 py-2.5 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-sm pr-8"
+                    placeholder={addBatchesForSku.length > 0 ? "Pilih atau ketik batch baru..." : "Masukkan batch"} />
+                  {addBatchesForSku.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAddBatchDropdown(!showAddBatchDropdown)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-text-secondary hover:text-primary p-0.5"
+                    >
+                      <svg className={`w-4 h-4 transition-transform ${showAddBatchDropdown ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path d="M6 9l6 6 6-6" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+                {showAddBatchDropdown && addForm.sku.trim() && (
+                  <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-border rounded-xl shadow-lg overflow-hidden">
+                    {addFilteredBatches.length > 0 ? (
+                      <div className="max-h-40 overflow-y-auto">
+                        {addFilteredBatches.map((b) => (
+                          <button
+                            key={b}
+                            type="button"
+                            onClick={() => { setAddForm({ ...addForm, batch: b }); setShowAddBatchDropdown(false); }}
+                            className={`w-full text-left px-3 py-2 text-sm hover:bg-primary-pale/50 transition border-b border-border last:border-b-0 ${
+                              addForm.batch === b ? "bg-primary/10 text-primary font-semibold" : "text-text-primary"
+                            }`}
+                          >
+                            {b}
+                          </button>
+                        ))}
+                      </div>
+                    ) : addForm.batch.trim() ? (
+                      <div className="px-3 py-2 text-xs text-text-secondary">
+                        <span className="text-primary font-medium">&quot;{addForm.batch.trim()}&quot;</span> — batch baru
+                      </div>
+                    ) : (
+                      <div className="px-3 py-2 text-xs text-text-secondary">Tidak ada batch untuk SKU ini</div>
+                    )}
+                    {addForm.batch.trim() && !addBatchesForSku.includes(addForm.batch.trim()) && addFilteredBatches.length > 0 && (
+                      <div className="border-t border-border px-3 py-2 bg-gray-50">
+                        <button
+                          type="button"
+                          onClick={() => setShowAddBatchDropdown(false)}
+                          className="text-xs text-primary font-medium hover:underline"
+                        >
+                          + Gunakan &quot;{addForm.batch.trim()}&quot; sebagai batch baru
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Qty */}
@@ -1038,16 +1168,59 @@ export default function HistoryPage() {
                       {/* Row 2: Batch | Qty | Actions */}
                       <div className="flex items-center gap-2">
                         {/* Batch */}
-                        <div className="flex items-center gap-1 min-w-0">
+                        <div className="flex items-center gap-1 min-w-0 relative" ref={editingBatch === entry.rowId ? inlineBatchDropdownRef : undefined}>
                           <span className="text-[10px] text-text-secondary">Batch:</span>
                           {editingBatch === entry.rowId ? (
-                            <input
-                              type="text" value={editingBatchValue}
-                              onChange={(e) => setEditingBatchValue(e.target.value)}
-                              onBlur={() => saveInlineBatch(entry)}
-                              onKeyDown={(e) => { if (e.key === "Enter") saveInlineBatch(entry); if (e.key === "Escape") setEditingBatch(null); }}
-                              autoFocus className="w-20 px-1 py-0.5 border border-primary rounded text-[11px] focus:outline-none focus:ring-1 focus:ring-primary"
-                            />
+                            <div className="relative">
+                              <input
+                                type="text" value={editingBatchValue}
+                                onChange={(e) => { setEditingBatchValue(e.target.value); setShowInlineBatchDropdown(true); }}
+                                onKeyDown={(e) => { if (e.key === "Enter") saveInlineBatch(entry); if (e.key === "Escape") { setEditingBatch(null); setShowInlineBatchDropdown(false); } }}
+                                autoFocus className="w-24 px-1 py-0.5 border border-primary rounded text-[11px] focus:outline-none focus:ring-1 focus:ring-primary pr-5"
+                              />
+                              {inlineBatchesForSku.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setShowInlineBatchDropdown(!showInlineBatchDropdown)}
+                                  className="absolute right-0.5 top-1/2 -translate-y-1/2 text-text-secondary hover:text-primary p-0.5"
+                                >
+                                  <svg className={`w-3 h-3 transition-transform ${showInlineBatchDropdown ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                    <path d="M6 9l6 6 6-6" />
+                                  </svg>
+                                </button>
+                              )}
+                              {showInlineBatchDropdown && inlineBatchesForSku.length > 0 && (
+                                <div className="absolute z-30 left-0 mt-1 w-36 bg-white border border-border rounded-lg shadow-lg overflow-hidden">
+                                  <div className="max-h-32 overflow-y-auto">
+                                    {inlineFilteredBatches.map((b) => (
+                                      <button
+                                        key={b}
+                                        type="button"
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        onClick={() => { setEditingBatchValue(b); setShowInlineBatchDropdown(false); }}
+                                        className={`w-full text-left px-2 py-1.5 text-[11px] hover:bg-primary-pale/50 transition border-b border-border last:border-b-0 ${
+                                          editingBatchValue === b ? "bg-primary/10 text-primary font-semibold" : "text-text-primary"
+                                        }`}
+                                      >
+                                        {b}
+                                      </button>
+                                    ))}
+                                  </div>
+                                  {editingBatchValue.trim() && !inlineBatchesForSku.includes(editingBatchValue.trim()) && (
+                                    <div className="border-t border-border px-2 py-1.5 bg-gray-50">
+                                      <button
+                                        type="button"
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        onClick={() => setShowInlineBatchDropdown(false)}
+                                        className="text-[10px] text-primary font-medium hover:underline"
+                                      >
+                                        + &quot;{editingBatchValue.trim()}&quot; batch baru
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           ) : (
                             <span className="text-[11px] text-text-secondary cursor-pointer hover:text-primary transition" onClick={() => startInlineBatchEdit(entry)}>
                               {entry.batch} <span className="text-[9px]">✏️</span>
@@ -1098,7 +1271,7 @@ export default function HistoryPage() {
       </div>
 
       {selectedEntry && (
-        <EditModal entry={selectedEntry} isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={handleSaveEdit} />
+        <EditModal entry={selectedEntry} isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={handleSaveEdit} allProducts={allProductsRef.current || undefined} />
       )}
 
       <BottomNav activePage="history" />

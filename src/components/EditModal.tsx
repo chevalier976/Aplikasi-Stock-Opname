@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { HistoryEntry, Product } from "@/lib/types";
 import { lookupBarcodeApi, searchProductsApi } from "@/lib/api";
 import BarcodeScanner from "./BarcodeScanner";
@@ -19,6 +19,7 @@ interface EditModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (data: EditData) => void;
+  allProducts?: Product[];
 }
 
 export default function EditModal({
@@ -26,6 +27,7 @@ export default function EditModal({
   isOpen,
   onClose,
   onSave,
+  allProducts,
 }: EditModalProps) {
   const [quantity, setQuantity] = useState(entry.qty);
   const [formula, setFormula] = useState(entry.formula || "");
@@ -38,6 +40,39 @@ export default function EditModal({
   const [barcode, setBarcode] = useState("");
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
   const [scanningBarcode, setScanningBarcode] = useState(false);
+  const [showBatchDropdown, setShowBatchDropdown] = useState(false);
+  const batchDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Get unique batches for current SKU from allProducts
+  const batchesForSku = useMemo(() => {
+    const skuVal = sku.trim().toLowerCase();
+    if (!skuVal || !allProducts) return [];
+    const batchSet = new Set<string>();
+    allProducts.forEach((p) => {
+      if (p.sku.trim().toLowerCase() === skuVal && p.batch) {
+        batchSet.add(p.batch);
+      }
+    });
+    return Array.from(batchSet).sort();
+  }, [sku, allProducts]);
+
+  // Filtered batches based on current input
+  const filteredBatches = useMemo(() => {
+    const q = batch.trim().toLowerCase();
+    if (!q) return batchesForSku;
+    return batchesForSku.filter((b) => b.toLowerCase().includes(q));
+  }, [batch, batchesForSku]);
+
+  // Close batch dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (batchDropdownRef.current && !batchDropdownRef.current.contains(e.target as Node)) {
+        setShowBatchDropdown(false);
+      }
+    };
+    if (showBatchDropdown) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showBatchDropdown]);
 
   useEffect(() => {
     setQuantity(entry.qty);
@@ -47,6 +82,7 @@ export default function EditModal({
     setBatch(entry.batch);
     setBarcode("");
     setShowBarcodeScanner(false);
+    setShowBatchDropdown(false);
   }, [entry]);
 
   if (!isOpen) return null;
@@ -230,16 +266,68 @@ export default function EditModal({
             />
           </div>
 
-          <div>
+          <div ref={batchDropdownRef} className="relative">
             <label className="block text-sm font-semibold text-text-primary mb-1">
               Batch:
             </label>
-            <input
-              type="text"
-              value={batch}
-              onChange={(e) => setBatch(e.target.value)}
-              className="w-full px-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-            />
+            <div className="relative">
+              <input
+                type="text"
+                value={batch}
+                onChange={(e) => { setBatch(e.target.value); setShowBatchDropdown(true); }}
+                onFocus={() => { if (sku.trim()) setShowBatchDropdown(true); }}
+                className="w-full px-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary pr-8"
+                placeholder={batchesForSku.length > 0 ? "Pilih atau ketik batch baru..." : "Masukkan batch"}
+              />
+              {batchesForSku.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowBatchDropdown(!showBatchDropdown)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-text-secondary hover:text-primary p-0.5"
+                >
+                  <svg className={`w-4 h-4 transition-transform ${showBatchDropdown ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            {showBatchDropdown && sku.trim() && (
+              <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-border rounded-lg shadow-lg overflow-hidden">
+                {filteredBatches.length > 0 ? (
+                  <div className="max-h-40 overflow-y-auto">
+                    {filteredBatches.map((b) => (
+                      <button
+                        key={b}
+                        type="button"
+                        onClick={() => { setBatch(b); setShowBatchDropdown(false); }}
+                        className={`w-full text-left px-3 py-2 text-sm hover:bg-primary-pale/50 transition border-b border-border last:border-b-0 ${
+                          batch === b ? "bg-primary/10 text-primary font-semibold" : "text-text-primary"
+                        }`}
+                      >
+                        {b}
+                      </button>
+                    ))}
+                  </div>
+                ) : batch.trim() ? (
+                  <div className="px-3 py-2 text-xs text-text-secondary">
+                    <span className="text-primary font-medium">&quot;{batch.trim()}&quot;</span> — batch baru
+                  </div>
+                ) : (
+                  <div className="px-3 py-2 text-xs text-text-secondary">Tidak ada batch untuk SKU ini</div>
+                )}
+                {batch.trim() && !batchesForSku.includes(batch.trim()) && filteredBatches.length > 0 && (
+                  <div className="border-t border-border px-3 py-2 bg-gray-50">
+                    <button
+                      type="button"
+                      onClick={() => setShowBatchDropdown(false)}
+                      className="text-xs text-primary font-medium hover:underline"
+                    >
+                      + Gunakan &quot;{batch.trim()}&quot; sebagai batch baru
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div>
