@@ -286,3 +286,14 @@ export const getAllProductsApi = async (): Promise<{
 }> => {
   return apiCall("getAllProducts");
 };
+
+export const moveProductsApi = async (
+  fromLocation: string,
+  toLocation: string,
+  items?: Array<{ sku: string; batch: string }>
+): Promise<{ success: boolean; message?: string; moved?: number; skipped?: number }> => {
+  invalidateMemCache("getProducts");
+  invalidateMemCache("getAllProducts");
+  invalidateMemCache("getAllLocations");
+  return apiCall("moveProducts", { fromLocation, toLocation, items: items || [] });
+};

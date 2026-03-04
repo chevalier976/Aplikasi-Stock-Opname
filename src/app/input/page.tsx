@@ -8,7 +8,7 @@ import LoadingSpinner from "@/components/LoadingSpinner";
 import BarcodeScanner from "@/components/BarcodeScanner";
 import QtyInput from "@/components/QtyInput";
 import { calcExpr } from "@/components/QtyInput";
-import { getProductsApi, saveStockOpnameApi, deleteProductApi, addMasterProductApi, lookupBarcodeApi, searchProductsApi, warmupCacheApi, preloadHistory, getAllProductsApi, invalidateMemCache } from "@/lib/api";
+import { getProductsApi, saveStockOpnameApi, deleteProductApi, addMasterProductApi, lookupBarcodeApi, searchProductsApi, warmupCacheApi, preloadHistory, getAllProductsApi, moveProductsApi, searchLocationsApi, invalidateMemCache } from "@/lib/api";
 import { Product, HistoryEntry } from "@/lib/types";
 import { getCache, setCache, clearCache } from "@/lib/cache";
 import toast from "react-hot-toast";
@@ -50,6 +50,16 @@ function InputPageContent() {
   // Batch dropdown (inline edit)
   const [showInlineBatchDropdown, setShowInlineBatchDropdown] = useState(false);
   const inlineBatchDropdownRef = useRef<HTMLDivElement>(null);
+  // Move location
+  const [showMoveModal, setShowMoveModal] = useState(false);
+  const [moveTarget, setMoveTarget] = useState("");
+  const [moveMode, setMoveMode] = useState<"all" | "select">("all");
+  const [moveSelected, setMoveSelected] = useState<Set<string>>(new Set());
+  const [movingProducts, setMovingProducts] = useState(false);
+  const [moveLocSuggestions, setMoveLocSuggestions] = useState<Array<{ locationCode: string; productCount: number }>>([]);
+  const [showMoveLocSuggestions, setShowMoveLocSuggestions] = useState(false);
+  const [moveLocSearchTimer, setMoveLocSearchTimer] = useState<NodeJS.Timeout | null>(null);
+  const moveLocRef = useRef<HTMLDivElement>(null);
 
   // Unique key per product row: SKU + batch combination
   const productKey = (sku: string, batch: string) => `${sku}__${batch}`;
@@ -453,6 +463,80 @@ function InputPageContent() {
     toast.success("Batch diperbarui");
   };
 
+  // ── Move Location handlers ──
+  const openMoveModal = () => {
+    setMoveTarget("");
+    setMoveMode("all");
+    setMoveSelected(new Set());
+    setMoveLocSuggestions([]);
+    setShowMoveLocSuggestions(false);
+    setShowMoveModal(true);
+  };
+
+  const handleMoveLocSearch = (query: string) => {
+    setMoveTarget(query);
+    if (moveLocSearchTimer) clearTimeout(moveLocSearchTimer);
+    if (!query.trim()) { setMoveLocSuggestions([]); setShowMoveLocSuggestions(false); return; }
+    const timer = setTimeout(async () => {
+      try {
+        const result = await searchLocationsApi(query.trim());
+        if (result.success && result.locations) {
+          // Filter out current location
+          setMoveLocSuggestions(result.locations.filter(l => l.locationCode.toUpperCase() !== location.toUpperCase()));
+          setShowMoveLocSuggestions(true);
+        }
+      } catch { /* ignore */ }
+    }, 300);
+    setMoveLocSearchTimer(timer);
+  };
+
+  const toggleMoveSelect = (sku: string, batch: string) => {
+    const key = productKey(sku, batch);
+    setMoveSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
+  const handleMoveProducts = async () => {
+    const target = moveTarget.trim().toUpperCase();
+    if (!target) { toast.error("Masukkan lokasi tujuan"); return; }
+    if (target === location.toUpperCase()) { toast.error("Lokasi tujuan tidak boleh sama"); return; }
+
+    const items = moveMode === "select"
+      ? products.filter(p => moveSelected.has(productKey(p.sku, p.batch))).map(p => ({ sku: p.sku, batch: String(p.batch) }))
+      : [];
+
+    if (moveMode === "select" && items.length === 0) { toast.error("Pilih minimal 1 produk"); return; }
+
+    setMovingProducts(true);
+    try {
+      const result = await moveProductsApi(location, target, items);
+      if (result.success) {
+        toast.success(result.message || "Produk berhasil dipindah");
+        setShowMoveModal(false);
+        // Reload products for current location
+        clearCache("products:");
+        invalidateMemCache("getProducts");
+        invalidateMemCache("getAllProducts");
+        invalidateMemCache("getAllLocations");
+        const refreshed = await getProductsApi(location);
+        if (refreshed.success && refreshed.products) {
+          setProducts(refreshed.products);
+        } else {
+          setProducts([]);
+        }
+      } else {
+        toast.error(result.message || "Gagal memindahkan produk");
+      }
+    } catch {
+      toast.error("Gagal memindahkan produk");
+    } finally {
+      setMovingProducts(false);
+    }
+  };
+
   const handleSave = () => {
     const existingItems = products
       .filter((product) => quantities[productKey(product.sku, product.batch)] > 0)
@@ -584,14 +668,23 @@ function InputPageContent() {
           </div>
         </div>
 
-        {/* ── Add New Product Button ── */}
-        <div className="mb-3">
+        {/* ── Add New Product & Move Location Buttons ── */}
+        <div className="mb-3 flex gap-2">
           <button
             onClick={() => setShowAddForm(!showAddForm)}
-            className="w-full bg-primary text-white py-3 rounded-2xl font-semibold hover:bg-primary-light transition text-sm shadow-card active:scale-[0.98]"
+            className="flex-1 bg-primary text-white py-3 rounded-2xl font-semibold hover:bg-primary-light transition text-sm shadow-card active:scale-[0.98]"
           >
-            {showAddForm ? "✕ Tutup Form" : "+ Tambah Produk Baru"}
+            {showAddForm ? "✕ Tutup Form" : "+ Tambah Produk"}
           </button>
+          {products.length > 0 && (
+            <button
+              onClick={openMoveModal}
+              className="bg-amber-500 text-white px-4 py-3 rounded-2xl font-semibold hover:bg-amber-600 transition text-sm shadow-card active:scale-[0.98] flex items-center gap-1.5"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
+              Pindah
+            </button>
+          )}
         </div>
 
         {/* ── Add New Product Form ── */}
@@ -994,6 +1087,156 @@ function InputPageContent() {
       </div>
 
       <BottomNav activePage="scan" />
+
+      {/* ── Move Location Modal ── */}
+      {showMoveModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setShowMoveModal(false)}>
+          <div className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            {/* Modal Header */}
+            <div className="px-5 pt-5 pb-3 border-b border-border">
+              <div className="flex items-center justify-between mb-1">
+                <h2 className="text-base font-bold text-text-primary flex items-center gap-2">
+                  <svg className="w-5 h-5 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
+                  Pindah Lokasi
+                </h2>
+                <button onClick={() => setShowMoveModal(false)} className="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-text-secondary text-sm">✕</button>
+              </div>
+              <p className="text-xs text-text-secondary">Pindahkan produk dari <span className="font-semibold text-primary">{location}</span> ke lokasi lain</p>
+            </div>
+
+            {/* Modal Body */}
+            <div className="px-5 py-4 overflow-y-auto flex-1 space-y-4">
+              {/* Target Location */}
+              <div ref={moveLocRef} className="relative">
+                <label className="block text-xs font-medium text-text-primary mb-1">Lokasi Tujuan</label>
+                <input
+                  type="text"
+                  value={moveTarget}
+                  onChange={(e) => handleMoveLocSearch(e.target.value)}
+                  onFocus={() => { if (moveLocSuggestions.length > 0) setShowMoveLocSuggestions(true); }}
+                  placeholder="Ketik kode lokasi tujuan..."
+                  className="w-full border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
+                />
+                {showMoveLocSuggestions && moveLocSuggestions.length > 0 && (
+                  <div className="absolute z-10 left-0 right-0 mt-1 bg-white border border-border rounded-xl shadow-lg max-h-36 overflow-y-auto">
+                    {moveLocSuggestions.map(loc => (
+                      <button key={loc.locationCode} type="button"
+                        onMouseDown={e => e.preventDefault()}
+                        onClick={() => { setMoveTarget(loc.locationCode); setShowMoveLocSuggestions(false); }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-primary-pale/50 border-b border-border last:border-b-0 flex justify-between"
+                      >
+                        <span className="font-medium text-text-primary">{loc.locationCode}</span>
+                        <span className="text-xs text-text-secondary">{loc.productCount} produk</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Move Mode */}
+              <div>
+                <label className="block text-xs font-medium text-text-primary mb-2">Mode Pindah</label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setMoveMode("all")}
+                    className={`flex-1 py-2 rounded-xl text-xs font-semibold transition border ${moveMode === "all" ? "bg-amber-500 text-white border-amber-500" : "bg-white text-text-primary border-border hover:border-amber-300"}`}
+                  >
+                    Semua Produk ({products.length})
+                  </button>
+                  <button
+                    onClick={() => setMoveMode("select")}
+                    className={`flex-1 py-2 rounded-xl text-xs font-semibold transition border ${moveMode === "select" ? "bg-amber-500 text-white border-amber-500" : "bg-white text-text-primary border-border hover:border-amber-300"}`}
+                  >
+                    Pilih Produk
+                  </button>
+                </div>
+              </div>
+
+              {/* Product Selection (when mode=select) */}
+              {moveMode === "select" && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-medium text-text-primary">Pilih Produk ({moveSelected.size}/{products.length})</label>
+                    <button
+                      onClick={() => {
+                        if (moveSelected.size === products.length) {
+                          setMoveSelected(new Set());
+                        } else {
+                          setMoveSelected(new Set(products.map(p => productKey(p.sku, p.batch))));
+                        }
+                      }}
+                      className="text-[10px] text-primary font-medium hover:underline"
+                    >
+                      {moveSelected.size === products.length ? "Batal Semua" : "Pilih Semua"}
+                    </button>
+                  </div>
+                  <div className="border border-border rounded-xl overflow-hidden max-h-48 overflow-y-auto">
+                    {products.map((product, idx) => {
+                      const key = productKey(product.sku, product.batch);
+                      const isSelected = moveSelected.has(key);
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => toggleMoveSelect(product.sku, product.batch)}
+                          className={`w-full text-left px-3 py-2 flex items-center gap-2.5 border-b border-border last:border-b-0 transition ${isSelected ? "bg-amber-50" : idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}
+                        >
+                          <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition ${isSelected ? "bg-amber-500 border-amber-500" : "border-gray-300"}`}>
+                            {isSelected && <svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M5 13l4 4L19 7" /></svg>}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[11px] font-medium text-text-primary truncate">{product.productName}</p>
+                            <p className="text-[10px] text-text-secondary">SKU: {product.sku} | Batch: {product.batch}</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Summary */}
+              <div className="bg-amber-50 rounded-xl p-3 border border-amber-200">
+                <div className="flex items-start gap-2">
+                  <svg className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+                  <div className="text-[11px] text-amber-800">
+                    <p className="font-semibold mb-0.5">
+                      {moveMode === "all"
+                        ? `${products.length} produk akan dipindah`
+                        : `${moveSelected.size} produk akan dipindah`
+                      }
+                    </p>
+                    <p>Dari: <span className="font-semibold">{location}</span></p>
+                    <p>Ke: <span className="font-semibold">{moveTarget.trim().toUpperCase() || "..."}</span></p>
+                    <p className="mt-1 text-amber-600">Produk yang sudah ada di lokasi tujuan akan dilewati.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-5 py-4 border-t border-border flex gap-3">
+              <button
+                onClick={() => setShowMoveModal(false)}
+                className="flex-1 py-2.5 rounded-xl border border-border text-sm font-semibold text-text-primary hover:bg-gray-50 transition"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleMoveProducts}
+                disabled={movingProducts || !moveTarget.trim() || (moveMode === "select" && moveSelected.size === 0)}
+                className="flex-1 py-2.5 rounded-xl bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {movingProducts ? <LoadingSpinner /> : (
+                  <>
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
+                    Pindahkan
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

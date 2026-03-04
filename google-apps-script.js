@@ -117,6 +117,7 @@ function doPost(e) {
       case "warmupCache":     result = warmupCache(data); break;
       case "getAllLocations":  result = getAllLocations(); break;
       case "getAllProducts":   result = getAllProducts(); break;
+      case "moveProducts":    result = moveProducts(data); break;
       default:                result = { success: false, message: "Unknown action" };
     }
 
@@ -553,4 +554,71 @@ function getAllProducts() {
   var resp = { success: true, products: products };
   cachePut(ck, resp, 60);
   return resp;
+}
+
+// ──────────────────────────────────────────────────────────────
+// MOVE PRODUCTS — bulk transfer products between locations
+// ──────────────────────────────────────────────────────────────
+
+function moveProducts(data) {
+  return withScriptLock(function() {
+    var fromLoc = normalizeLocation(data.fromLocation);
+    var toLoc = normalizeLocation(data.toLocation);
+    if (!fromLoc || !toLoc) return { success: false, message: "Lokasi asal dan tujuan harus diisi" };
+    if (fromLoc === toLoc) return { success: false, message: "Lokasi asal dan tujuan tidak boleh sama" };
+
+    var items = data.items; // array of { sku, batch }  — if empty/null, move ALL
+    var moveAll = !items || items.length === 0;
+
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Master Data");
+    var mdData = sheet.getDataRange().getValues();
+
+    // Build set of items to move (for selective move)
+    var moveSet = {};
+    if (!moveAll) {
+      for (var m = 0; m < items.length; m++) {
+        var mk = normalizeText(String(items[m].sku)) + "||" + normalizeText(String(items[m].batch || ""));
+        moveSet[mk] = true;
+      }
+    }
+
+    // Build set of existing products at target location to avoid duplicates
+    var existsAtTarget = {};
+    for (var t = 1; t < mdData.length; t++) {
+      if (normalizeLocation(mdData[t][0]) === toLoc) {
+        var tk = normalizeText(String(mdData[t][2])) + "||" + normalizeText(String(mdData[t][3]));
+        existsAtTarget[tk] = true;
+      }
+    }
+
+    // Update rows: change location from source to target
+    var movedCount = 0;
+    var skippedCount = 0;
+    for (var i = 1; i < mdData.length; i++) {
+      if (normalizeLocation(mdData[i][0]) !== fromLoc) continue;
+      var sku = normalizeText(String(mdData[i][2]));
+      var batch = normalizeText(String(mdData[i][3]));
+      var key = sku + "||" + batch;
+
+      if (!moveAll && !moveSet[key]) continue; // not selected
+
+      if (existsAtTarget[key]) {
+        skippedCount++;
+        continue; // already exists at target, skip to avoid duplicate
+      }
+
+      sheet.getRange(i + 1, 1).setValue(toLoc); // Update column A (Location)
+      existsAtTarget[key] = true; // mark as exists now
+      movedCount++;
+    }
+
+    if (movedCount === 0 && skippedCount === 0) {
+      return { success: false, message: "Tidak ada produk yang ditemukan di lokasi asal" };
+    }
+
+    bumpCacheVersion();
+    var msg = movedCount + " produk berhasil dipindah ke " + toLoc;
+    if (skippedCount > 0) msg += " (" + skippedCount + " dilewati karena sudah ada di tujuan)";
+    return { success: true, message: msg, moved: movedCount, skipped: skippedCount };
+  });
 }
