@@ -184,9 +184,14 @@ export const updateEntryApi = async (
   sessionId: string,
   newQty: number,
   editTimestamp: string,
-  extra?: { productName?: string; sku?: string; batch?: string; formula?: string }
+  extra?: { productName?: string; sku?: string; batch?: string; formula?: string; location?: string }
 ): Promise<{ success: boolean; message?: string }> => {
   invalidateMemCache("getHistory");
+  if (extra?.location) {
+    invalidateMemCache("getProducts");
+    invalidateMemCache("getAllLocations");
+    invalidateMemCache("getAllProducts");
+  }
   return apiCall("updateEntry", {
     rowId,
     sessionId,

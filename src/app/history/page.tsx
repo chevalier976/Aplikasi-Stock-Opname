@@ -365,6 +365,7 @@ export default function HistoryPage() {
             productName: data.productName ?? e.productName,
             sku: data.sku ?? e.sku,
             batch: data.batch ?? e.batch,
+            location: data.location ?? e.location,
             qty: data.newQty,
             formula: data.formula || e.formula,
             edited: "Yes",
@@ -374,7 +375,7 @@ export default function HistoryPage() {
     );
     setHistory(updated);
     setIsModalOpen(false);
-    toast.success("Berhasil mengupdate entry");
+    toast.success(data.location ? `Berhasil update & pindah ke ${data.location}` : "Berhasil mengupdate entry");
 
     const ck = `history:ALL:all`;
     setCache(ck, updated);
@@ -391,6 +392,7 @@ export default function HistoryPage() {
           sku: data.sku,
           batch: data.batch,
           formula: data.formula,
+          location: data.location,
         }
       );
 

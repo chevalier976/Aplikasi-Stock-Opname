@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { HistoryEntry, Product } from "@/lib/types";
-import { lookupBarcodeApi, searchProductsApi } from "@/lib/api";
+import { lookupBarcodeApi, searchProductsApi, searchLocationsApi } from "@/lib/api";
 import BarcodeScanner from "./BarcodeScanner";
 import QtyInput from "./QtyInput";
 
@@ -12,6 +12,7 @@ export interface EditData {
   sku: string;
   batch: string;
   formula?: string;
+  location?: string;
 }
 
 interface EditModalProps {
@@ -34,6 +35,7 @@ export default function EditModal({
   const [productName, setProductName] = useState(entry.productName);
   const [sku, setSku] = useState(entry.sku);
   const [batch, setBatch] = useState(entry.batch);
+  const [location, setLocation] = useState(entry.location);
   const [searchResults, setSearchResults] = useState<Product[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [searchTimer, setSearchTimer] = useState<NodeJS.Timeout | null>(null);
@@ -42,6 +44,10 @@ export default function EditModal({
   const [scanningBarcode, setScanningBarcode] = useState(false);
   const [showBatchDropdown, setShowBatchDropdown] = useState(false);
   const batchDropdownRef = useRef<HTMLDivElement>(null);
+  const [locSuggestions, setLocSuggestions] = useState<{locationCode: string; productCount: number}[]>([]);
+  const [showLocSuggestions, setShowLocSuggestions] = useState(false);
+  const [locSearchTimer, setLocSearchTimer] = useState<NodeJS.Timeout | null>(null);
+  const locRef = useRef<HTMLDivElement>(null);
 
   // Get unique batches for current SKU from allProducts
   const batchesForSku = useMemo(() => {
@@ -71,10 +77,13 @@ export default function EditModal({
       if (batchDropdownRef.current && !batchDropdownRef.current.contains(e.target as Node)) {
         setShowBatchDropdown(false);
       }
+      if (locRef.current && !locRef.current.contains(e.target as Node)) {
+        setShowLocSuggestions(false);
+      }
     };
-    if (showBatchDropdown) document.addEventListener("mousedown", handleClickOutside);
+    if (showBatchDropdown || showLocSuggestions) document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showBatchDropdown]);
+  }, [showBatchDropdown, showLocSuggestions]);
 
   useEffect(() => {
     setQuantity(entry.qty);
@@ -82,9 +91,12 @@ export default function EditModal({
     setProductName(entry.productName);
     setSku(entry.sku);
     setBatch(entry.batch);
+    setLocation(entry.location);
     setBarcode("");
     setShowBarcodeScanner(false);
     setShowBatchDropdown(false);
+    setLocSuggestions([]);
+    setShowLocSuggestions(false);
   }, [entry]);
 
   if (!isOpen) return null;
@@ -140,9 +152,32 @@ export default function EditModal({
     }
   };
 
+  const handleLocSearch = (value: string) => {
+    setLocation(value);
+    if (locSearchTimer) clearTimeout(locSearchTimer);
+    if (value.trim().length < 2) {
+      setLocSuggestions([]);
+      setShowLocSuggestions(false);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const result = await searchLocationsApi(value.trim());
+        if (result.success && result.locations) {
+          setLocSuggestions(result.locations);
+          setShowLocSuggestions(result.locations.length > 0);
+        }
+      } catch (err) {
+        console.error("Location search error:", err);
+      }
+    }, 200);
+    setLocSearchTimer(timer);
+  };
+
   const handleSave = () => {
     if (quantity < 0) return;
-    onSave({ newQty: quantity, productName, sku, batch, formula });
+    const locChanged = location.trim().toUpperCase() !== entry.location.trim().toUpperCase();
+    onSave({ newQty: quantity, productName, sku, batch, formula, location: locChanged ? location.trim().toUpperCase() : undefined });
   };
 
   return (
@@ -155,10 +190,37 @@ export default function EditModal({
           Edit Entry
         </h2>
 
-        <div className="mb-3">
-          <p className="text-sm text-text-secondary">
-            <span className="font-semibold">Lokasi:</span> {entry.location}
-          </p>
+        <div ref={locRef} className="mb-3 relative">
+          <label className="block text-sm font-semibold text-text-primary mb-1">Lokasi:</label>
+          <input
+            type="text"
+            value={location}
+            onChange={(e) => handleLocSearch(e.target.value)}
+            onFocus={() => { if (locSuggestions.length > 0) setShowLocSuggestions(true); }}
+            className="w-full px-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary uppercase"
+            placeholder="Kode lokasi"
+          />
+          {location.trim().toUpperCase() !== entry.location.trim().toUpperCase() && (
+            <p className="text-xs text-amber-600 mt-1">⚠️ Lokasi berubah: {entry.location} → {location.trim().toUpperCase()}</p>
+          )}
+          {showLocSuggestions && locSuggestions.length > 0 && (
+            <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-border rounded-lg shadow-lg max-h-40 overflow-y-auto">
+              {locSuggestions.map((loc) => (
+                <button
+                  key={loc.locationCode}
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => { setLocation(loc.locationCode); setShowLocSuggestions(false); }}
+                  className={`w-full text-left px-3 py-2 hover:bg-primary-pale transition border-b border-border last:border-b-0 ${
+                    location.trim().toUpperCase() === loc.locationCode.toUpperCase() ? "bg-primary/10" : ""
+                  }`}
+                >
+                  <span className="font-medium text-sm">{loc.locationCode}</span>
+                  <span className="text-xs text-text-secondary ml-2">({loc.productCount} produk)</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="mb-4 space-y-3">

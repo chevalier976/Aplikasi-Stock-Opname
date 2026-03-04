@@ -434,6 +434,7 @@ function updateEntry(data) {
         var oldBatch = normalizeText(String(values[i][7]));
 
         var row = values[i].slice();
+        if (data.location !== undefined) row[4] = normalizeLocation(data.location);
         if (data.productName !== undefined) row[5] = data.productName;
         if (data.sku !== undefined) row[6] = data.sku;
         if (data.batch !== undefined) row[7] = data.batch;
@@ -443,12 +444,13 @@ function updateEntry(data) {
         if (data.formula !== undefined) row[11] = data.formula || "";
         sheet.getRange(i + 1, 1, 1, row.length).setValues([row]);
 
-        // Sync changes to Master Data if productName, sku, or batch changed
+        // Sync changes to Master Data if location, productName, sku, or batch changed
+        var newLocation = normalizeLocation(data.location !== undefined ? data.location : oldLocation);
         var newProductName = normalizeText(data.productName !== undefined ? data.productName : oldProductName);
         var newSku = normalizeText(data.sku !== undefined ? data.sku : oldSku);
         var newBatch = normalizeText(data.batch !== undefined ? data.batch : oldBatch);
 
-        if (newProductName !== oldProductName || newSku !== oldSku || newBatch !== oldBatch) {
+        if (newLocation !== oldLocation || newProductName !== oldProductName || newSku !== oldSku || newBatch !== oldBatch) {
           var mdSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Master Data");
           var mdData = mdSheet.getDataRange().getValues();
           for (var j = 1; j < mdData.length; j++) {
@@ -456,6 +458,7 @@ function updateEntry(data) {
                 normalizeText(String(mdData[j][2])) === oldSku &&
                 normalizeText(String(mdData[j][3])) === oldBatch) {
               // Update the Master Data row with new values
+              if (newLocation !== oldLocation) mdSheet.getRange(j + 1, 1).setValue(newLocation); // col A = Location
               mdSheet.getRange(j + 1, 2).setValue(newProductName); // col B = Product Name
               mdSheet.getRange(j + 1, 3).setValue(newSku);         // col C = SKU
               mdSheet.getRange(j + 1, 4).setValue(newBatch);       // col D = Batch
@@ -593,7 +596,8 @@ function moveProducts(data) {
 
     // Update rows: change location from source to target
     var movedCount = 0;
-    var skippedCount = 0;
+    var mergedCount = 0;
+    var rowsToDelete = []; // rows to delete after loop (merged duplicates)
     for (var i = 1; i < mdData.length; i++) {
       if (normalizeLocation(mdData[i][0]) !== fromLoc) continue;
       var sku = normalizeText(String(mdData[i][2]));
@@ -603,8 +607,10 @@ function moveProducts(data) {
       if (!moveAll && !moveSet[key]) continue; // not selected
 
       if (existsAtTarget[key]) {
-        skippedCount++;
-        continue; // already exists at target, skip to avoid duplicate
+        // Duplicate at target — delete source row (merge)
+        rowsToDelete.push(i + 1); // sheet row (1-based)
+        mergedCount++;
+        continue;
       }
 
       sheet.getRange(i + 1, 1).setValue(toLoc); // Update column A (Location)
@@ -612,13 +618,19 @@ function moveProducts(data) {
       movedCount++;
     }
 
-    if (movedCount === 0 && skippedCount === 0) {
+    // Delete merged rows from bottom to top to keep indices valid
+    rowsToDelete.sort(function(a, b) { return b - a; });
+    for (var d = 0; d < rowsToDelete.length; d++) {
+      sheet.deleteRow(rowsToDelete[d]);
+    }
+
+    if (movedCount === 0 && mergedCount === 0) {
       return { success: false, message: "Tidak ada produk yang ditemukan di lokasi asal" };
     }
 
     bumpCacheVersion();
     var msg = movedCount + " produk berhasil dipindah ke " + toLoc;
-    if (skippedCount > 0) msg += " (" + skippedCount + " dilewati karena sudah ada di tujuan)";
-    return { success: true, message: msg, moved: movedCount, skipped: skippedCount };
+    if (mergedCount > 0) msg += " (" + mergedCount + " digabung karena sudah ada di tujuan)";
+    return { success: true, message: msg, moved: movedCount, merged: mergedCount };
   });
 }
