@@ -23,6 +23,9 @@ export default function HistoryPage() {
   // ── Search & Filter state ──
   const [searchQuery, setSearchQuery] = useState("");
   const [filterDate, setFilterDate] = useState("");   // "YYYY-MM-DD"
+  const [selectedLocations, setSelectedLocations] = useState<Set<string>>(new Set());
+  const [showLocationFilter, setShowLocationFilter] = useState(false);
+  const locationFilterRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   // Inline edit state
@@ -157,6 +160,11 @@ export default function HistoryPage() {
       });
     }
 
+    // Filter by selected locations
+    if (selectedLocations.size > 0) {
+      result = result.filter((e) => selectedLocations.has(e.location));
+    }
+
     // Sort newest first
     result = [...result].sort((a, b) => {
       const ta = new Date(a.timestamp).getTime() || 0;
@@ -165,13 +173,57 @@ export default function HistoryPage() {
     });
 
     return result;
-  }, [history, searchQuery, filterDate]);
+  }, [history, searchQuery, filterDate, selectedLocations]);
 
-  const hasActiveFilters = searchQuery || filterDate;
+  // Extract unique locations from history
+  const uniqueLocations = useMemo(() => {
+    const locMap = new Map<string, number>();
+    history.forEach((e) => {
+      locMap.set(e.location, (locMap.get(e.location) || 0) + 1);
+    });
+    return Array.from(locMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([loc, count]) => ({ location: loc, count }));
+  }, [history]);
+
+  // Group filtered history by location
+  const groupedHistory = useMemo(() => {
+    const groups = new Map<string, HistoryEntry[]>();
+    filteredHistory.forEach((e) => {
+      if (!groups.has(e.location)) groups.set(e.location, []);
+      groups.get(e.location)!.push(e);
+    });
+    return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [filteredHistory]);
+
+  const toggleLocation = (loc: string) => {
+    setSelectedLocations((prev) => {
+      const next = new Set(prev);
+      if (next.has(loc)) next.delete(loc);
+      else next.add(loc);
+      return next;
+    });
+  };
+
+  const selectAllLocations = () => setSelectedLocations(new Set());
+
+  // Close location filter dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (locationFilterRef.current && !locationFilterRef.current.contains(e.target as Node)) {
+        setShowLocationFilter(false);
+      }
+    };
+    if (showLocationFilter) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showLocationFilter]);
+
+  const hasActiveFilters = searchQuery || filterDate || selectedLocations.size > 0;
 
   const clearAllFilters = () => {
     setSearchQuery("");
     setFilterDate("");
+    setSelectedLocations(new Set());
   };
 
   const handleEdit = (entry: HistoryEntry) => {
@@ -625,8 +677,87 @@ export default function HistoryPage() {
           </div>
         </div>
 
-        {/* ── Date Filter + Counter ── */}
+        {/* ── Location Filter + Date Filter + Counter ── */}
         <div className="mb-3 flex items-center gap-2 flex-wrap">
+          {/* Location filter dropdown */}
+          <div className="relative" ref={locationFilterRef}>
+            <button
+              type="button"
+              onClick={() => setShowLocationFilter(!showLocationFilter)}
+              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 shadow-card border text-xs font-medium transition ${
+                selectedLocations.size > 0
+                  ? "bg-primary text-white border-primary"
+                  : "bg-white text-text-secondary border-border hover:border-primary"
+              }`}
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
+                <circle cx="12" cy="10" r="3" />
+              </svg>
+              Lokasi
+              {selectedLocations.size > 0 && (
+                <span className="bg-white text-primary text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                  {selectedLocations.size}
+                </span>
+              )}
+              <svg className={`w-3 h-3 transition-transform ${showLocationFilter ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
+
+            {showLocationFilter && (
+              <div className="absolute z-30 left-0 mt-1 w-64 bg-white border border-border rounded-xl shadow-lg overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-gray-50">
+                  <span className="text-xs font-semibold text-text-primary">Filter Lokasi</span>
+                  <button
+                    type="button"
+                    onClick={selectAllLocations}
+                    className="text-[10px] text-primary font-medium hover:underline"
+                  >
+                    {selectedLocations.size > 0 ? "Tampilkan Semua" : "Semua aktif"}
+                  </button>
+                </div>
+                {/* Location list */}
+                <div className="max-h-52 overflow-y-auto">
+                  {uniqueLocations.map(({ location: loc, count }) => {
+                    const isChecked = selectedLocations.size === 0 || selectedLocations.has(loc);
+                    return (
+                      <label
+                        key={loc}
+                        className="flex items-center gap-2.5 px-3 py-2 hover:bg-primary-pale/50 transition cursor-pointer border-b border-border last:border-b-0"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {
+                            if (selectedLocations.size === 0) {
+                              // First click: select only this one (deselect others)
+                              const allExcept = new Set(uniqueLocations.map((l) => l.location));
+                              allExcept.delete(loc);
+                              setSelectedLocations(allExcept.size === 0 ? new Set() : new Set([loc]));
+                            } else {
+                              toggleLocation(loc);
+                            }
+                          }}
+                          className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary accent-[var(--primary)]"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-text-primary truncate">{loc}</p>
+                        </div>
+                        <span className="text-[10px] text-text-secondary bg-gray-100 px-1.5 py-0.5 rounded-full font-medium">{count}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {uniqueLocations.length === 0 && (
+                  <p className="px-3 py-3 text-xs text-text-secondary text-center">Tidak ada lokasi</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Date filter */}
           <div className="flex items-center gap-1.5 bg-white rounded-lg px-2.5 py-1.5 shadow-card border border-border">
             <svg className="w-4 h-4 text-text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><path d="M16 2v4M8 2v4M3 10h18" />
@@ -865,70 +996,89 @@ export default function HistoryPage() {
             )}
           </div>
         ) : (
-          <div className="space-y-2">
-            {filteredHistory.map((entry) => (
-              <div key={entry.rowId} className="bg-white rounded-xl shadow-card border border-border p-3">
-                {/* Row 1: Location + Product Name */}
-                <div className="flex items-start gap-2 mb-1.5">
-                  <span className="px-1.5 py-0.5 bg-primary/10 text-primary text-[10px] font-semibold rounded flex-shrink-0">{entry.location}</span>
-                  <p className="text-[11px] font-medium text-text-primary leading-tight flex-1">
-                    {entry.productName}
-                    {entry.edited === "Yes" && <span className="ml-0.5 text-[10px] text-accent-yellow" title={`Diedit: ${entry.editTimestamp}`}>✏️</span>}
-                  </p>
-                </div>
-                {/* Row 2: Batch | Qty | Actions */}
-                <div className="flex items-center gap-2">
-                  {/* Batch */}
-                  <div className="flex items-center gap-1 min-w-0">
-                    <span className="text-[10px] text-text-secondary">Batch:</span>
-                    {editingBatch === entry.rowId ? (
-                      <input
-                        type="text" value={editingBatchValue}
-                        onChange={(e) => setEditingBatchValue(e.target.value)}
-                        onBlur={() => saveInlineBatch(entry)}
-                        onKeyDown={(e) => { if (e.key === "Enter") saveInlineBatch(entry); if (e.key === "Escape") setEditingBatch(null); }}
-                        autoFocus className="w-20 px-1 py-0.5 border border-primary rounded text-[11px] focus:outline-none focus:ring-1 focus:ring-primary"
-                      />
-                    ) : (
-                      <span className="text-[11px] text-text-secondary cursor-pointer hover:text-primary transition" onClick={() => startInlineBatchEdit(entry)}>
-                        {entry.batch} <span className="text-[9px]">✏️</span>
-                      </span>
-                    )}
+          <div className="space-y-4">
+            {groupedHistory.map(([locationName, entries]) => (
+              <div key={locationName}>
+                {/* Location Group Header */}
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="flex items-center gap-1.5 bg-primary text-white px-3 py-1.5 rounded-lg shadow-card">
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
+                      <circle cx="12" cy="10" r="3" />
+                    </svg>
+                    <span className="text-xs font-bold">{locationName}</span>
+                    <span className="bg-white/20 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{entries.length}</span>
                   </div>
-                  {/* Qty */}
-                  <div className="flex items-center gap-1 ml-auto">
-                    <span className="text-[10px] text-text-secondary">Qty:</span>
-                    {editingQty === entry.rowId ? (
-                      <div className="flex flex-col items-end">
-                        <QtyInput wide value={editingQtyValue} onChange={(v) => setEditingQtyValue(v)} onExprCommit={(expr) => setEditingQtyFormula(expr)} />
-                        <div className="flex gap-1 mt-1">
-                          <button type="button" onClick={() => saveInlineQty(entry)} className="px-2 py-0.5 bg-primary text-white text-[10px] rounded font-semibold">💾</button>
-                          <button type="button" onClick={() => setEditingQty(null)} className="px-2 py-0.5 bg-gray-200 text-text-primary text-[10px] rounded font-semibold">✕</button>
+                  <div className="flex-1 border-t border-border" />
+                </div>
+
+                {/* Entries for this location */}
+                <div className="space-y-2 ml-1">
+                  {entries.map((entry) => (
+                    <div key={entry.rowId} className="bg-white rounded-xl shadow-card border border-border p-3">
+                      {/* Row 1: Product Name */}
+                      <div className="flex items-start gap-2 mb-1.5">
+                        <p className="text-[11px] font-medium text-text-primary leading-tight flex-1">
+                          {entry.productName}
+                          {entry.edited === "Yes" && <span className="ml-0.5 text-[10px] text-accent-yellow" title={`Diedit: ${entry.editTimestamp}`}>✏️</span>}
+                        </p>
+                      </div>
+                      {/* Row 2: Batch | Qty | Actions */}
+                      <div className="flex items-center gap-2">
+                        {/* Batch */}
+                        <div className="flex items-center gap-1 min-w-0">
+                          <span className="text-[10px] text-text-secondary">Batch:</span>
+                          {editingBatch === entry.rowId ? (
+                            <input
+                              type="text" value={editingBatchValue}
+                              onChange={(e) => setEditingBatchValue(e.target.value)}
+                              onBlur={() => saveInlineBatch(entry)}
+                              onKeyDown={(e) => { if (e.key === "Enter") saveInlineBatch(entry); if (e.key === "Escape") setEditingBatch(null); }}
+                              autoFocus className="w-20 px-1 py-0.5 border border-primary rounded text-[11px] focus:outline-none focus:ring-1 focus:ring-primary"
+                            />
+                          ) : (
+                            <span className="text-[11px] text-text-secondary cursor-pointer hover:text-primary transition" onClick={() => startInlineBatchEdit(entry)}>
+                              {entry.batch} <span className="text-[9px]">✏️</span>
+                            </span>
+                          )}
+                        </div>
+                        {/* Qty */}
+                        <div className="flex items-center gap-1 ml-auto">
+                          <span className="text-[10px] text-text-secondary">Qty:</span>
+                          {editingQty === entry.rowId ? (
+                            <div className="flex flex-col items-end">
+                              <QtyInput wide value={editingQtyValue} onChange={(v) => setEditingQtyValue(v)} onExprCommit={(expr) => setEditingQtyFormula(expr)} />
+                              <div className="flex gap-1 mt-1">
+                                <button type="button" onClick={() => saveInlineQty(entry)} className="px-2 py-0.5 bg-primary text-white text-[10px] rounded font-semibold">💾</button>
+                                <button type="button" onClick={() => setEditingQty(null)} className="px-2 py-0.5 bg-gray-200 text-text-primary text-[10px] rounded font-semibold">✕</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="inline-flex items-center gap-0.5">
+                              <span
+                                className={`text-sm font-bold text-primary ${entry.formula ? "cursor-pointer underline decoration-dotted" : ""}`}
+                                onClick={() => { if (entry.formula) setShowFormula(showFormula === entry.rowId ? null : entry.rowId); }}
+                              >
+                                {entry.qty.toLocaleString()}
+                              </span>
+                              {entry.formula && <span className="text-[9px] text-text-secondary">🧮</span>}
+                              <button type="button" onClick={() => startInlineQtyEdit(entry)} className="text-[10px] text-text-secondary hover:text-primary" title="Edit qty">✏️</button>
+                            </span>
+                          )}
+                        </div>
+                        {/* Actions */}
+                        <div className="flex items-center gap-1 flex-shrink-0 ml-1">
+                          <button onClick={() => handleEdit(entry)} className="px-2 py-1 bg-primary text-white text-[10px] rounded font-medium">Edit</button>
+                          <button onClick={() => handleDelete(entry)} className="px-2 py-1 bg-accent-red text-white text-[10px] rounded font-medium">Hapus</button>
                         </div>
                       </div>
-                    ) : (
-                      <span className="inline-flex items-center gap-0.5">
-                        <span
-                          className={`text-sm font-bold text-primary ${entry.formula ? "cursor-pointer underline decoration-dotted" : ""}`}
-                          onClick={() => { if (entry.formula) setShowFormula(showFormula === entry.rowId ? null : entry.rowId); }}
-                        >
-                          {entry.qty.toLocaleString()}
-                        </span>
-                        {entry.formula && <span className="text-[9px] text-text-secondary">🧮</span>}
-                        <button type="button" onClick={() => startInlineQtyEdit(entry)} className="text-[10px] text-text-secondary hover:text-primary" title="Edit qty">✏️</button>
-                      </span>
-                    )}
-                  </div>
-                  {/* Actions */}
-                  <div className="flex items-center gap-1 flex-shrink-0 ml-1">
-                    <button onClick={() => handleEdit(entry)} className="px-2 py-1 bg-primary text-white text-[10px] rounded font-medium">Edit</button>
-                    <button onClick={() => handleDelete(entry)} className="px-2 py-1 bg-accent-red text-white text-[10px] rounded font-medium">Hapus</button>
-                  </div>
+                      {/* Formula tooltip */}
+                      {showFormula === entry.rowId && entry.formula && (
+                        <div className="mt-1 bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded inline-block">{entry.formula}</div>
+                      )}
+                    </div>
+                  ))}
                 </div>
-                {/* Formula tooltip */}
-                {showFormula === entry.rowId && entry.formula && (
-                  <div className="mt-1 bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded inline-block">{entry.formula}</div>
-                )}
               </div>
             ))}
           </div>
