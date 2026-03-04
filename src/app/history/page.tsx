@@ -161,9 +161,14 @@ export default function HistoryPage() {
       });
     }
 
-    // Filter by selected locations
+    // Filter by selected location groups (prefix match)
     if (selectedLocations.size > 0) {
-      result = result.filter((e) => selectedLocations.has(e.location));
+      result = result.filter((e) => {
+        for (const prefix of selectedLocations) {
+          if (e.location === prefix || e.location.startsWith(prefix + "/")) return true;
+        }
+        return false;
+      });
     }
 
     // Sort newest first
@@ -176,13 +181,17 @@ export default function HistoryPage() {
     return result;
   }, [history, searchQuery, filterDate, selectedLocations]);
 
-  // Extract unique locations from history
+  // Extract location groups (parent prefixes) from history
+  // e.g. CEN/PARAS, CEN/PARAS/RCK → group "CEN/PARAS" with count 2
   const uniqueLocations = useMemo(() => {
-    const locMap = new Map<string, number>();
+    const groupMap = new Map<string, number>();
     history.forEach((e) => {
-      locMap.set(e.location, (locMap.get(e.location) || 0) + 1);
+      // Take first 2 segments as group key: "CEN/PARAS" from "CEN/PARAS/RCK"
+      const parts = e.location.split("/");
+      const groupKey = parts.length >= 2 ? parts.slice(0, 2).join("/") : parts[0];
+      groupMap.set(groupKey, (groupMap.get(groupKey) || 0) + 1);
     });
-    return Array.from(locMap.entries())
+    return Array.from(groupMap.entries())
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([loc, count]) => ({ location: loc, count }));
   }, [history]);
@@ -752,7 +761,7 @@ export default function HistoryPage() {
                     {selectedLocations.size > 0 ? "Tampilkan Semua" : "Semua aktif"}
                   </button>
                 </div>
-                {/* Location list */}
+                {/* Location group list */}
                 <div className="max-h-52 overflow-y-auto">
                   {uniqueLocations.map(({ location: loc, count }) => {
                     const isChecked = selectedLocations.size === 0 || selectedLocations.has(loc);
@@ -766,10 +775,8 @@ export default function HistoryPage() {
                           checked={isChecked}
                           onChange={() => {
                             if (selectedLocations.size === 0) {
-                              // First click: select only this one (deselect others)
-                              const allExcept = new Set(uniqueLocations.map((l) => l.location));
-                              allExcept.delete(loc);
-                              setSelectedLocations(allExcept.size === 0 ? new Set() : new Set([loc]));
+                              // First click: select only this group
+                              setSelectedLocations(new Set([loc]));
                             } else {
                               toggleLocation(loc);
                             }
