@@ -1159,12 +1159,23 @@ export default function HistoryPage() {
                 <div className="space-y-2 ml-1">
                   {entries.map((entry) => (
                     <div key={entry.rowId} className="bg-white rounded-xl shadow-card border border-border p-3">
-                      {/* Row 1: Product Name + Operator badge */}
+                      {/* Row 1: Product Name + Date + Operator badge */}
                       <div className="flex items-start gap-2 mb-1.5">
                         <p className="text-[11px] font-medium text-text-primary leading-tight flex-1">
                           {entry.productName}
                           {entry.edited === "Yes" && <span className="ml-0.5 text-[10px] text-accent-yellow" title={`Diedit: ${entry.editTimestamp}`}>✏️</span>}
                         </p>
+                        <span className="text-[9px] text-text-secondary flex-shrink-0">
+                          {(() => {
+                            const d = parseTimestamp(entry.timestamp);
+                            if (!d) return entry.timestamp;
+                            const dd = String(d.getDate()).padStart(2, "0");
+                            const mm = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"][d.getMonth()];
+                            const hh = String(d.getHours()).padStart(2, "0");
+                            const mi = String(d.getMinutes()).padStart(2, "0");
+                            return `${dd} ${mm} ${hh}:${mi}`;
+                          })()}
+                        </span>
                         {entry.operator && (
                           <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-[9px] font-semibold rounded flex-shrink-0">
                             {entry.operator}
