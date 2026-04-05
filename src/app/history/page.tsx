@@ -1246,14 +1246,13 @@ export default function HistoryPage() {
                               </div>
                             </div>
                           ) : (
-                            <span className="inline-flex items-center gap-1">
-                              <span
-                                className={`text-base font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-lg ${entry.formula ? "cursor-pointer" : ""}`}
-                                onClick={() => { if (entry.formula) setShowFormula(showFormula === entry.rowId ? null : entry.rowId); }}
-                              >
+                            <span className="inline-flex items-center gap-1.5 flex-wrap">
+                              <span className="text-base font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-lg">
                                 {entry.qty.toLocaleString()}
                               </span>
-                              {entry.formula && <span className="text-[9px] text-text-secondary">🧮</span>}
+                              {entry.formula && (
+                                <span className="text-[10px] text-text-secondary bg-gray-100 px-1.5 py-0.5 rounded-md">🧮 {entry.formula}</span>
+                              )}
                               <button type="button" onClick={() => startInlineQtyEdit(entry)} className="text-[10px] text-text-secondary hover:text-primary opacity-50" title="Edit qty">✏️</button>
                             </span>
                           )}
