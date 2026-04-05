@@ -1143,57 +1143,44 @@ export default function HistoryPage() {
             {groupedHistory.map(([locationName, entries]) => (
               <div key={locationName}>
                 {/* Location Group Header */}
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="flex items-center gap-1.5 bg-primary text-white px-3 py-1.5 rounded-lg shadow-card">
-                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <div className="flex items-center gap-2.5 mb-2.5">
+                  <div className="flex items-center gap-2 bg-gradient-to-r from-primary to-primary-light text-white px-4 py-2 rounded-xl shadow-md">
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
                       <circle cx="12" cy="10" r="3" />
                     </svg>
-                    <span className="text-xs font-bold">{locationName}</span>
-                    <span className="bg-white/20 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{entries.length}</span>
+                    <span className="text-sm font-bold tracking-wide">{locationName}</span>
+                    <span className="bg-white/25 text-[10px] font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">{entries.length}</span>
                   </div>
-                  <div className="flex-1 border-t border-border" />
+                  <div className="flex-1 h-px bg-gradient-to-r from-border to-transparent" />
                 </div>
 
                 {/* Entries for this location */}
-                <div className="space-y-2 ml-1">
+                <div className="space-y-2.5">
                   {entries.map((entry) => (
-                    <div key={entry.rowId} className="bg-white rounded-xl shadow-card border border-border p-3">
-                      {/* Row 1: Product Name + Date + Operator badge */}
-                      <div className="flex items-start gap-2 mb-1.5">
-                        <p className="text-[11px] font-medium text-text-primary leading-tight flex-1">
+                    <div key={entry.rowId} className="bg-white rounded-xl shadow-card border border-border border-l-[3px] border-l-primary p-3.5">
+                      {/* Row 1: Product Name + Actions */}
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <p className="text-[13px] font-semibold text-text-primary leading-snug flex-1">
                           {entry.productName}
-                          {entry.edited === "Yes" && <span className="ml-0.5 text-[10px] text-accent-yellow" title={`Diedit: ${entry.editTimestamp}`}>✏️</span>}
+                          {entry.edited === "Yes" && <span className="ml-1 text-[10px] text-accent-yellow" title={`Diedit: ${entry.editTimestamp}`}>✏️</span>}
                         </p>
-                        <span className="text-[9px] text-text-secondary flex-shrink-0">
-                          {(() => {
-                            const d = parseTimestamp(entry.timestamp);
-                            if (!d) return entry.timestamp;
-                            const dd = String(d.getDate()).padStart(2, "0");
-                            const mm = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"][d.getMonth()];
-                            const hh = String(d.getHours()).padStart(2, "0");
-                            const mi = String(d.getMinutes()).padStart(2, "0");
-                            return `${dd} ${mm} ${hh}:${mi}`;
-                          })()}
-                        </span>
-                        {entry.operator && (
-                          <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-[9px] font-semibold rounded flex-shrink-0">
-                            {entry.operator}
-                          </span>
-                        )}
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <button onClick={() => handleEdit(entry)} className="px-2.5 py-1 bg-primary/10 text-primary text-[10px] rounded-lg font-semibold hover:bg-primary/20 transition">Edit</button>
+                          <button onClick={() => handleDelete(entry)} className="px-2.5 py-1 bg-accent-red/10 text-accent-red text-[10px] rounded-lg font-semibold hover:bg-accent-red/20 transition">Hapus</button>
+                        </div>
                       </div>
-                      {/* Row 2: Batch | Qty | Actions */}
-                      <div className="flex items-center gap-2">
-                        {/* Batch */}
+                      {/* Row 2: Batch (inline editable) + SKU */}
+                      <div className="flex items-center gap-3 mb-2 flex-wrap">
                         <div className="flex items-center gap-1 min-w-0 relative" ref={editingBatch === entry.rowId ? inlineBatchDropdownRef : undefined}>
-                          <span className="text-[10px] text-text-secondary">Batch:</span>
+                          <span className="text-[11px] text-text-secondary font-medium">Batch:</span>
                           {editingBatch === entry.rowId ? (
                             <div className="relative">
                               <input
                                 type="text" value={editingBatchValue}
                                 onChange={(e) => { setEditingBatchValue(e.target.value); setShowInlineBatchDropdown(true); }}
                                 onKeyDown={(e) => { if (e.key === "Enter") saveInlineBatch(entry); if (e.key === "Escape") { setEditingBatch(null); setShowInlineBatchDropdown(false); } }}
-                                autoFocus className="w-24 px-1 py-0.5 border border-primary rounded text-[11px] focus:outline-none focus:ring-1 focus:ring-primary pr-5"
+                                autoFocus className="w-28 px-1.5 py-0.5 border border-primary rounded-lg text-[11px] focus:outline-none focus:ring-1 focus:ring-primary pr-5"
                               />
                               {inlineBatchesForSku.length > 0 && (
                                 <button
@@ -1239,44 +1226,60 @@ export default function HistoryPage() {
                               )}
                             </div>
                           ) : (
-                            <span className="text-[11px] text-text-secondary cursor-pointer hover:text-primary transition" onClick={() => startInlineBatchEdit(entry)}>
-                              {entry.batch} <span className="text-[9px]">✏️</span>
+                            <span className="text-[11px] text-text-primary font-medium cursor-pointer hover:text-primary transition" onClick={() => startInlineBatchEdit(entry)}>
+                              {entry.batch} <span className="text-[9px] opacity-50">✏️</span>
                             </span>
                           )}
                         </div>
-                        {/* Qty */}
-                        <div className="flex items-center gap-1 ml-auto">
-                          <span className="text-[10px] text-text-secondary">Qty:</span>
+                        <span className="text-[10px] text-text-secondary">SKU: <span className="font-medium text-text-primary">{entry.sku}</span></span>
+                      </div>
+                      {/* Row 3: Qty (prominent) + Date + Operator */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] text-text-secondary font-medium">Qty:</span>
                           {editingQty === entry.rowId ? (
-                            <div className="flex flex-col items-end">
+                            <div className="flex flex-col items-start">
                               <QtyInput wide value={editingQtyValue} onChange={(v) => setEditingQtyValue(v)} onExprCommit={(expr) => setEditingQtyFormula(expr)} />
                               <div className="flex gap-1 mt-1">
-                                <button type="button" onClick={() => saveInlineQty(entry)} className="px-2 py-0.5 bg-primary text-white text-[10px] rounded font-semibold">💾</button>
-                                <button type="button" onClick={() => setEditingQty(null)} className="px-2 py-0.5 bg-gray-200 text-text-primary text-[10px] rounded font-semibold">✕</button>
+                                <button type="button" onClick={() => saveInlineQty(entry)} className="px-2.5 py-0.5 bg-primary text-white text-[10px] rounded-lg font-semibold">💾</button>
+                                <button type="button" onClick={() => setEditingQty(null)} className="px-2.5 py-0.5 bg-gray-200 text-text-primary text-[10px] rounded-lg font-semibold">✕</button>
                               </div>
                             </div>
                           ) : (
-                            <span className="inline-flex items-center gap-0.5">
+                            <span className="inline-flex items-center gap-1">
                               <span
-                                className={`text-sm font-bold text-primary ${entry.formula ? "cursor-pointer underline decoration-dotted" : ""}`}
+                                className={`text-base font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-lg ${entry.formula ? "cursor-pointer" : ""}`}
                                 onClick={() => { if (entry.formula) setShowFormula(showFormula === entry.rowId ? null : entry.rowId); }}
                               >
                                 {entry.qty.toLocaleString()}
                               </span>
                               {entry.formula && <span className="text-[9px] text-text-secondary">🧮</span>}
-                              <button type="button" onClick={() => startInlineQtyEdit(entry)} className="text-[10px] text-text-secondary hover:text-primary" title="Edit qty">✏️</button>
+                              <button type="button" onClick={() => startInlineQtyEdit(entry)} className="text-[10px] text-text-secondary hover:text-primary opacity-50" title="Edit qty">✏️</button>
                             </span>
                           )}
                         </div>
-                        {/* Actions */}
-                        <div className="flex items-center gap-1 flex-shrink-0 ml-1">
-                          <button onClick={() => handleEdit(entry)} className="px-2 py-1 bg-primary text-white text-[10px] rounded font-medium">Edit</button>
-                          <button onClick={() => handleDelete(entry)} className="px-2 py-1 bg-accent-red text-white text-[10px] rounded font-medium">Hapus</button>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-text-secondary">
+                            {(() => {
+                              const d = parseTimestamp(entry.timestamp);
+                              if (!d) return entry.timestamp;
+                              const dd = String(d.getDate()).padStart(2, "0");
+                              const mm = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"][d.getMonth()];
+                              const hh = String(d.getHours()).padStart(2, "0");
+                              const mi = String(d.getMinutes()).padStart(2, "0");
+                              return `${dd} ${mm} ${hh}:${mi}`;
+                            })()}
+                          </span>
+                          {entry.operator && (
+                            <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 text-[9px] font-semibold rounded-md">
+                              {entry.operator}
+                            </span>
+                          )}
                         </div>
                       </div>
                       {/* Formula tooltip */}
                       {showFormula === entry.rowId && entry.formula && (
-                        <div className="mt-1 bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded inline-block">{entry.formula}</div>
+                        <div className="mt-2 bg-gray-800 text-white text-[10px] px-2.5 py-1 rounded-lg inline-block">{entry.formula}</div>
                       )}
                     </div>
                   ))}
