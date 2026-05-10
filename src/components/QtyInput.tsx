@@ -29,6 +29,7 @@ export default function QtyInput({ value, onChange, className, wide, onExprCommi
   const [display, setDisplay] = useState(String(value));
   const [preview, setPreview] = useState<number | null>(null);
   const [focused, setFocused] = useState(false);
+  const [textMode, setTextMode] = useState(false);
   const inputElRef = useState<HTMLInputElement | null>(null);
   // Track whether an expression was already committed (to prevent blur from clearing formula)
   const exprCommittedRef = useRef(false);
@@ -109,7 +110,7 @@ export default function QtyInput({ value, onChange, className, wide, onExprCommi
         <input
           ref={(el) => { inputElRef[0] = el; }}
           type="text"
-          inputMode="numeric"
+          inputMode={textMode ? "text" : "numeric"}
           value={display}
           onChange={(e) => handleChange(e.target.value)}
           onFocus={(e) => {
@@ -127,10 +128,19 @@ export default function QtyInput({ value, onChange, className, wide, onExprCommi
         )}
       </div>
       {wide && (
-        <div className="flex gap-1 mt-1">
+        <div className="flex gap-1 mt-1 items-center">
           <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => insertOp("+")} className={opBtnCls}>+</button>
           <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => insertOp("-")} className={opBtnCls}>−</button>
           <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => insertOp("x")} className={opBtnCls}>×</button>
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => { setTextMode((v) => !v); inputElRef[0]?.focus(); }}
+            title={textMode ? "Keypad angka" : "Keyboard penuh (bisa ketik +−×)"}
+            className={`${opBtnCls} ${textMode ? "!bg-primary !text-white" : ""}`}
+          >
+            {textMode ? "123" : "abc"}
+          </button>
         </div>
       )}
       {isExpr && preview !== null && (

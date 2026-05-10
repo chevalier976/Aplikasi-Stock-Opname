@@ -23,9 +23,9 @@ export default function HistoryPage() {
   // ── Search & Filter state ──
   const [searchQuery, setSearchQuery] = useState("");
   const [filterDate, setFilterDate] = useState("");   // "YYYY-MM-DD"
+  const [filterDateEnd, setFilterDateEnd] = useState(""); // for range filtering
+  const [activeTab, setActiveTab] = useState<"all" | "today" | "week" | "month">("all");
   const [selectedLocations, setSelectedLocations] = useState<Set<string>>(new Set());
-  const [showLocationFilter, setShowLocationFilter] = useState(false);
-  const locationFilterRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   // Inline edit state
@@ -220,21 +220,27 @@ export default function HistoryPage() {
   const filteredHistory = useMemo(() => {
     let result = history;
 
-    // Search by product name
+    // Search by product name, SKU, batch, location, operator
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       result = result.filter((e) =>
         e.productName.toLowerCase().includes(q) ||
-        e.sku.toLowerCase().includes(q)
+        e.sku.toLowerCase().includes(q) ||
+        e.batch.toLowerCase().includes(q) ||
+        e.location.toLowerCase().includes(q) ||
+        (e.operator && e.operator.toLowerCase().includes(q))
       );
     }
 
-    // Filter by specific date
+    // Filter by date or date range
     if (filterDate) {
       result = result.filter((e) => {
         const d = parseTimestamp(e.timestamp);
         if (!d) return false;
         const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        if (filterDateEnd) {
+          return iso >= filterDate && iso <= filterDateEnd;
+        }
         return iso === filterDate;
       });
     }
@@ -257,7 +263,7 @@ export default function HistoryPage() {
     });
 
     return result;
-  }, [history, searchQuery, filterDate, selectedLocations]);
+  }, [history, searchQuery, filterDate, filterDateEnd, selectedLocations]);
 
   // Extract location groups (parent prefixes) from history
   // e.g. CEN/PARAS, CEN/PARAS/RCK → group "CEN/PARAS" with count 2
@@ -274,14 +280,18 @@ export default function HistoryPage() {
       .map(([loc, count]) => ({ location: loc, count }));
   }, [history]);
 
-  // Group filtered history by location
+  // Group filtered history by location — sort groups by most recent entry
   const groupedHistory = useMemo(() => {
     const groups = new Map<string, HistoryEntry[]>();
     filteredHistory.forEach((e) => {
       if (!groups.has(e.location)) groups.set(e.location, []);
       groups.get(e.location)!.push(e);
     });
-    return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    return Array.from(groups.entries()).sort((a, b) => {
+      const latestA = Math.max(...a[1].map((e) => new Date(e.timestamp).getTime() || 0));
+      const latestB = Math.max(...b[1].map((e) => new Date(e.timestamp).getTime() || 0));
+      return latestB - latestA;
+    });
   }, [filteredHistory]);
 
   const toggleLocation = (loc: string) => {
@@ -293,24 +303,13 @@ export default function HistoryPage() {
     });
   };
 
-  const selectAllLocations = () => setSelectedLocations(new Set());
-
-  // Close location filter dropdown on outside click
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (locationFilterRef.current && !locationFilterRef.current.contains(e.target as Node)) {
-        setShowLocationFilter(false);
-      }
-    };
-    if (showLocationFilter) document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showLocationFilter]);
-
   const hasActiveFilters = searchQuery || filterDate || selectedLocations.size > 0;
 
   const clearAllFilters = () => {
     setSearchQuery("");
     setFilterDate("");
+    setFilterDateEnd("");
+    setActiveTab("all");
     setSelectedLocations(new Set());
   };
 
@@ -712,25 +711,34 @@ export default function HistoryPage() {
         <div className="flex gap-2 overflow-x-auto hide-scrollbar">
           {(["all", "today", "week", "month"] as const).map((tab) => {
             const labels = { all: "Semua", today: "Hari Ini", week: "Minggu Ini", month: "Bulan Ini" };
-            const isActive = !filterDate && !searchQuery && tab === "all"
-              || (tab === "today" && filterDate === new Date().toISOString().slice(0, 10));
             return (
               <button
                 key={tab}
                 onClick={() => {
-                  if (tab === "all") { setFilterDate(""); setSearchQuery(""); }
-                  else if (tab === "today") { setFilterDate(new Date().toISOString().slice(0, 10)); }
-                  else if (tab === "week") {
-                    const d = new Date(); d.setDate(d.getDate() - 7);
-                    setFilterDate(""); // Will use searchQuery approach
-                  }
-                  else if (tab === "month") {
-                    const d = new Date(); d.setDate(d.getDate() - 30);
+                  setActiveTab(tab);
+                  if (tab === "all") {
                     setFilterDate("");
+                    setFilterDateEnd("");
+                  } else if (tab === "today") {
+                    const today = new Date().toISOString().slice(0, 10);
+                    setFilterDate(today);
+                    setFilterDateEnd("");
+                  } else if (tab === "week") {
+                    const now = new Date();
+                    const weekAgo = new Date(now);
+                    weekAgo.setDate(now.getDate() - 7);
+                    setFilterDate(weekAgo.toISOString().slice(0, 10));
+                    setFilterDateEnd(now.toISOString().slice(0, 10));
+                  } else if (tab === "month") {
+                    const now = new Date();
+                    const monthAgo = new Date(now);
+                    monthAgo.setDate(now.getDate() - 30);
+                    setFilterDate(monthAgo.toISOString().slice(0, 10));
+                    setFilterDateEnd(now.toISOString().slice(0, 10));
                   }
                 }}
                 className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition ${
-                  (tab === "all" && !filterDate && !searchQuery)
+                  activeTab === tab
                     ? "bg-text-primary text-white"
                     : "bg-gray-100 text-text-secondary hover:bg-gray-200"
                 }`}
@@ -752,7 +760,7 @@ export default function HistoryPage() {
             <input
               ref={searchRef}
               type="text"
-              placeholder="Cari nama produk atau SKU..."
+              placeholder="Cari produk, SKU, batch, lokasi..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-8 py-2.5 bg-white border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-sm shadow-card"
@@ -769,84 +777,52 @@ export default function HistoryPage() {
           </div>
         </div>
 
-        {/* ── Location Filter + Date Filter + Counter ── */}
-        <div className="mb-3 flex items-center gap-2 flex-wrap">
-          {/* Location filter dropdown */}
-          <div className="relative" ref={locationFilterRef}>
+        {/* ── Location Chip Filters ── */}
+        {uniqueLocations.length > 0 && (
+          <div className="mb-3 flex gap-1.5 overflow-x-auto hide-scrollbar pb-0.5">
             <button
               type="button"
-              onClick={() => setShowLocationFilter(!showLocationFilter)}
-              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 shadow-card border text-xs font-medium transition ${
-                selectedLocations.size > 0
+              onClick={() => setSelectedLocations(new Set())}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition border shadow-card ${
+                selectedLocations.size === 0
                   ? "bg-primary text-white border-primary"
                   : "bg-white text-text-secondary border-border hover:border-primary"
               }`}
             >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
                 <circle cx="12" cy="10" r="3" />
               </svg>
-              Lokasi
-              {selectedLocations.size > 0 && (
-                <span className="bg-white text-primary text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
-                  {selectedLocations.size}
-                </span>
-              )}
-              <svg className={`w-3 h-3 transition-transform ${showLocationFilter ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M6 9l6 6 6-6" />
-              </svg>
+              Semua
+              <span className={`text-[10px] font-bold px-1 py-0.5 rounded-full ${
+                selectedLocations.size === 0 ? "bg-white/20" : "bg-gray-100"
+              }`}>{history.length}</span>
             </button>
-
-            {showLocationFilter && (
-              <div className="absolute z-30 left-0 mt-1 w-64 bg-white border border-border rounded-xl shadow-lg overflow-hidden">
-                {/* Header */}
-                <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-gray-50">
-                  <span className="text-xs font-semibold text-text-primary">Filter Lokasi</span>
-                  <button
-                    type="button"
-                    onClick={selectAllLocations}
-                    className="text-[10px] text-primary font-medium hover:underline"
-                  >
-                    {selectedLocations.size > 0 ? "Tampilkan Semua" : "Semua aktif"}
-                  </button>
-                </div>
-                {/* Location group list */}
-                <div className="max-h-52 overflow-y-auto">
-                  {uniqueLocations.map(({ location: loc, count }) => {
-                    const isChecked = selectedLocations.size === 0 || selectedLocations.has(loc);
-                    return (
-                      <label
-                        key={loc}
-                        className="flex items-center gap-2.5 px-3 py-2 hover:bg-primary-pale/50 transition cursor-pointer border-b border-border last:border-b-0"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => {
-                            if (selectedLocations.size === 0) {
-                              // First click: select only this group
-                              setSelectedLocations(new Set([loc]));
-                            } else {
-                              toggleLocation(loc);
-                            }
-                          }}
-                          className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary accent-[var(--primary)]"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium text-text-primary truncate">{loc}</p>
-                        </div>
-                        <span className="text-[10px] text-text-secondary bg-gray-100 px-1.5 py-0.5 rounded-full font-medium">{count}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-                {uniqueLocations.length === 0 && (
-                  <p className="px-3 py-3 text-xs text-text-secondary text-center">Tidak ada lokasi</p>
-                )}
-              </div>
-            )}
+            {uniqueLocations.map(({ location: loc, count }) => {
+              const isActive = selectedLocations.has(loc);
+              return (
+                <button
+                  key={loc}
+                  type="button"
+                  onClick={() => toggleLocation(loc)}
+                  className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition border shadow-card ${
+                    isActive
+                      ? "bg-primary text-white border-primary"
+                      : "bg-white text-text-secondary border-border hover:border-primary"
+                  }`}
+                >
+                  {loc}
+                  <span className={`text-[10px] font-bold px-1 py-0.5 rounded-full ${
+                    isActive ? "bg-white/20" : "bg-gray-100"
+                  }`}>{count}</span>
+                </button>
+              );
+            })}
           </div>
+        )}
 
+        {/* ── Date Filter + Counter ── */}
+        <div className="mb-3 flex items-center gap-2 flex-wrap">
           {/* Date filter */}
           <div className="flex items-center gap-1.5 bg-white rounded-lg px-2.5 py-1.5 shadow-card border border-border">
             <svg className="w-4 h-4 text-text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -855,7 +831,7 @@ export default function HistoryPage() {
             <input
               type="date"
               value={filterDate}
-              onChange={(e) => setFilterDate(e.target.value)}
+              onChange={(e) => { setFilterDate(e.target.value); setFilterDateEnd(""); setActiveTab("all"); }}
               className="text-xs focus:outline-none bg-transparent"
             />
           </div>
